@@ -25,16 +25,37 @@ var GetUsers = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryD
 	return users, nil
 })
 
+func getUserByID(ctx context.Context, db bunquery.QueryDB, id int64) (*User, error) {
+	user := new(User)
+	if err := db.NewSelect().Model(user).Where("id = ?", id).Scan(ctx); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 type GetUserArgs struct {
 	ID int64
 }
 
 var GetUser = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, args GetUserArgs) (*User, error) {
-	user := new(User)
-	if err := db.NewSelect().Model(user).Where("id = ?", args.ID).Scan(ctx); err != nil {
-		return nil, err
+	return getUserByID(ctx, db, args.ID)
+})
+
+type UpdateUserArgs struct {
+	ID   int64
+	Name string
+}
+
+var UpdateUser = bunquery.CreateMutation(func(ctx context.Context, db bunquery.MutationDB, args UpdateUserArgs) error {
+	if user, err := getUserByID(ctx, db, args.ID); err != nil {
+		return err
+	} else {
+		user.Name = args.Name
+		if _, err := db.NewUpdate().Model(user).WherePK().Exec(ctx); err != nil {
+			return err
+		}
 	}
-	return user, nil
+	return nil
 })
 
 func main() {
@@ -72,38 +93,13 @@ func main() {
 		fmt.Printf("user1: %v\n\n", user)
 	}
 
-	// Select a story and the associated author in a single query.
-	story := new(Story)
-	if err := db.NewSelect().
-		Model(story).
-		Relation("Author").
-		Limit(1).
-		Scan(ctx); err != nil {
+	if err := UpdateUser(ctx, UpdateUserArgs{ID: 1, Name: "admin_new_name"}); err != nil {
 		panic(err)
-	}
-	fmt.Printf("story and the author: %v\n\n", story)
-
-	// Select a user into a map.
-	var m map[string]any
-	if err := db.NewSelect().
-		Model((*User)(nil)).
-		Limit(1).
-		Scan(ctx, &m); err != nil {
+	} else if user, err := GetUser(ctx, GetUserArgs{ID: 1}); err != nil {
 		panic(err)
+	} else {
+		fmt.Printf("user1: %v\n\n", user)
 	}
-	fmt.Printf("user map: %v\n\n", m)
-
-	// Select all users scanning each column into a separate slice.
-	var ids []int64
-	var names []string
-	if err := db.NewSelect().
-		ColumnExpr("id, name").
-		Model((*User)(nil)).
-		OrderExpr("id ASC").
-		Scan(ctx, &ids, &names); err != nil {
-		panic(err)
-	}
-	fmt.Printf("users columns: %v %v\n\n", ids, names)
 }
 
 type User struct {
@@ -116,15 +112,8 @@ func (u User) String() string {
 	return fmt.Sprintf("User<%d %s %v>", u.ID, u.Name, u.Emails)
 }
 
-type Story struct {
-	ID       int64 `bun:",pk,autoincrement"`
-	Title    string
-	AuthorID int64
-	Author   *User `bun:"rel:belongs-to,join:author_id=id"`
-}
-
 func resetSchema(ctx context.Context, db *bun.DB) error {
-	if err := db.ResetModel(ctx, (*User)(nil), (*Story)(nil)); err != nil {
+	if err := db.ResetModel(ctx, (*User)(nil)); err != nil {
 		return err
 	}
 
@@ -139,16 +128,6 @@ func resetSchema(ctx context.Context, db *bun.DB) error {
 		},
 	}
 	if _, err := db.NewInsert().Model(&users).Exec(ctx); err != nil {
-		return err
-	}
-
-	stories := []Story{
-		{
-			Title:    "Cool story",
-			AuthorID: users[0].ID,
-		},
-	}
-	if _, err := db.NewInsert().Model(&stories).Exec(ctx); err != nil {
 		return err
 	}
 

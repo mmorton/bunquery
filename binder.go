@@ -9,7 +9,7 @@ import (
 
 type QueryBinder interface {
 	Kind() string
-	Bind(context.Context, bun.IDB, QueryBuilderEx)
+	Bind(context.Context, bun.IDB, QueryBuilderEx, ...any)
 }
 
 type QueryBindings map[string]QueryBinder
@@ -31,14 +31,14 @@ func (bindings QueryBindings) Use(binds ...QueryBinder) QueryBindings {
 	return res
 }
 
-func (bindings QueryBindings) Bind(ctx context.Context, db bun.IDB, qry QueryBuilderEx) {
+func (bindings QueryBindings) Bind(ctx context.Context, db bun.IDB, qry QueryBuilderEx, args ...any) {
 	for _, bind := range bindings {
-		bind.Bind(ctx, db, qry)
+		bind.Bind(ctx, db, qry, args...)
 	}
 }
 
-func bindSupportedQuery[Query any, Source SupportsQueryBuilderEx[Query]](ctx context.Context, db bun.IDB, bindings QueryBindings, qry Source) Source {
+func bindSupportedQuery[Query any, Source SupportsQueryBuilderEx[Query]](ctx context.Context, db bun.IDB, bindings QueryBindings, qry Source, args ...any) Source {
 	bld := NewQueryBuilderEx(qry)
-	bindings.Bind(ctx, db, bld)
+	bindings.Bind(ctx, db, bld, args...)
 	return qry
 }
