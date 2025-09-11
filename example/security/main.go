@@ -56,7 +56,7 @@ type GetMyStoriesArgs struct {
 var GetMyStories = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, args GetMyStoriesArgs) ([]Story, error) {
 	stories := make([]Story, 0)
 	if err := db.NewSelect().Model(&stories).OrderExpr("id ASC").Scan(ctx); err != nil {
-		panic(err)
+		return nil, err
 	}
 	return stories, nil
 })

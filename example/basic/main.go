@@ -20,7 +20,7 @@ type GetUsersArgs struct {
 var GetUsers = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, args GetUsersArgs) ([]User, error) {
 	users := make([]User, args.Limit)
 	if err := db.NewSelect().Model(&users).OrderExpr("id ASC").Limit(args.Limit).Scan(ctx); err != nil {
-		panic(err)
+		return nil, err
 	}
 	return users, nil
 })
