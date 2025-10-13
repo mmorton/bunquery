@@ -79,6 +79,12 @@ type GenericV[Value any, Derived any] struct {
 	requirements []*requirement[Value]
 }
 
+func NewGenericV[Value any, Derived any](derived Derived) *GenericV[Value, Derived] {
+	return &GenericV[Value, Derived]{
+		derived: derived,
+	}
+}
+
 // Always manipulates the last requirement's err/message.
 func (v *GenericV[Value, Derived]) Msg(msg string) Derived {
 	if len(v.requirements) == 0 {

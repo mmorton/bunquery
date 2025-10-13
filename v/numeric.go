@@ -25,6 +25,14 @@ type NumericV[Value interface {
 	*GenericV[Value, Derived]
 }
 
+func NewNumericV[Value interface {
+	constraints.Integer | constraints.Float
+}, Derived any](derived Derived) *NumericV[Value, Derived] {
+	return &NumericV[Value, Derived]{
+		GenericV: NewGenericV[Value, Derived](derived),
+	}
+}
+
 func (v *NumericV[Value, Derived]) Gt(req Value) Derived {
 	return v.Check(func(value Value) error {
 		if value > req {
@@ -137,11 +145,7 @@ func (v *IntegerV[Value]) In(req ...Value) IntegerValidator[Value] {
 
 func Int[Source any](grp *Set[Source], get func(Source) int) IntegerValidator[int] {
 	intV := &IntegerV[int]{}
-	intV.NumericV = &NumericV[int, IntegerValidator[int]]{
-		GenericV: &GenericV[int, IntegerValidator[int]]{
-			derived: intV,
-		},
-	}
+	intV.NumericV = NewNumericV[int, IntegerValidator[int]](intV)
 	grp.validations = append(grp.validations, func(source Source) ErrorSet {
 		value := get(source)
 		err := intV.Validate(value)
@@ -176,11 +180,7 @@ func (v *FloatV[Value]) Eq(check, epsi Value) FloatValidator[Value] {
 
 func Float[Source any](grp *Set[Source], get func(Source) float64) FloatValidator[float64] {
 	floatV := &FloatV[float64]{}
-	floatV.NumericV = &NumericV[float64, FloatValidator[float64]]{
-		GenericV: &GenericV[float64, FloatValidator[float64]]{
-			derived: floatV,
-		},
-	}
+	floatV.NumericV = NewNumericV[float64, FloatValidator[float64]](floatV)
 	grp.validations = append(grp.validations, func(source Source) ErrorSet {
 		value := get(source)
 		err := floatV.Validate(value)
