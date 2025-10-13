@@ -2,13 +2,9 @@ package bunquery
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/uptrace/bun"
 )
-
-type QueryFnImpl[QueryDB any, Args any, Res any] func(ctx context.Context, db QueryDB, args Args) (Res, error)
-type QueryFn[QueryDB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
 
 type QueryDB interface {
 	NewSelect(bindArgs ...any) *bun.SelectQuery
@@ -26,12 +22,27 @@ func (q query) NewSelect(bindArgs ...any) *bun.SelectQuery {
 	return bindSupportedQuery(q.ctx, q.db, q.binders, q.db.NewSelect(), bindArgs...)
 }
 
+func Ident[Args any](args Args) (Args, error) {
+	return args, nil
+}
+
+type QueryFnImpl[QueryDB any, Args any, Res any] func(ctx context.Context, db QueryDB, args Args) (Res, error)
+type QueryFn[QueryDB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
+
 func CreateQuery[Args any, Res any](fn QueryFnImpl[QueryDB, Args, Res]) QueryFn[QueryDB, Args, Res] {
-	var res Res
+	return CreateValidatedQuery(Ident, fn)
+}
+
+func CreateValidatedQuery[Args any, Res any](argsV func(Args) (Args, error), fn QueryFnImpl[QueryDB, Args, Res]) QueryFn[QueryDB, Args, Res] {
+	var zed Res
 	return func(ctx context.Context, args Args) (Res, error) {
 		c, ok := getQueryCtx(ctx)
 		if !ok {
-			return res, ErrNoQueryContext
+			return zed, ErrNoQueryContext
+		}
+		args, err := argsV(args)
+		if err != nil {
+			return zed, nil
 		}
 		q := query{
 			ctx:     ctx,
@@ -42,105 +53,29 @@ func CreateQuery[Args any, Res any](fn QueryFnImpl[QueryDB, Args, Res]) QueryFn[
 	}
 }
 
-type MutationFnImpl[MutationDB any, Args any] func(ctx context.Context, db MutationDB, args Args) error
-type MutationFn[MutationDB any, Args any] func(ctx context.Context, args Args) error
+type QueryExFnImpl[QueryDB any, Args any, Ex any, Res any] func(ctx context.Context, db QueryDB, args Args, ex Ex) (Res, error)
+type QueryExFn[QueryDB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
 
-type MutationDB interface {
-	QueryDB
-
-	NewInsert() *bun.InsertQuery
-	NewUpdate(bindArgs ...any) *bun.UpdateQuery
-	NewDelete(bindArgs ...any) *bun.DeleteQuery
+func CreateQueryEx[Args any, Ex any, Res any](fn QueryExFnImpl[QueryDB, Args, Ex, Res]) QueryExFn[QueryDB, Args, Ex, Res] {
+	return CreateValidatedQueryEx(Ident, fn)
 }
 
-type mutation struct {
-	ctx     context.Context
-	tx      bun.Tx
-	binders QueryBindings
-}
-
-var _ MutationDB = (*mutation)(nil)
-
-func (mut mutation) NewSelect(bindArgs ...any) *bun.SelectQuery {
-	return bindSupportedQuery(mut.ctx, mut.tx, mut.binders, mut.tx.NewSelect(), bindArgs...)
-}
-
-func (mut mutation) NewInsert() *bun.InsertQuery {
-	return mut.tx.NewInsert()
-}
-
-func (mut mutation) NewUpdate(bindArgs ...any) *bun.UpdateQuery {
-	return bindSupportedQuery(mut.ctx, mut.tx, mut.binders, mut.tx.NewUpdate(), bindArgs...)
-}
-
-func (mut mutation) NewDelete(bindArgs ...any) *bun.DeleteQuery {
-	return bindSupportedQuery(mut.ctx, mut.tx, mut.binders, mut.tx.NewDelete(), bindArgs...)
-}
-
-type MutationOptionsAware interface {
-	TxOptions() *sql.TxOptions
-}
-
-type MutationOptions struct {
-	sql.TxOptions
-}
-
-type MutationOptionFn func(*MutationOptions) *MutationOptions
-
-func WithIsolationLevel(level sql.IsolationLevel) MutationOptionFn {
-	return func(opt *MutationOptions) *MutationOptions {
-		opt.TxOptions.Isolation = level
-		return opt
-	}
-}
-
-func WithReadOnly(readOnly bool) MutationOptionFn {
-	return func(opt *MutationOptions) *MutationOptions {
-		opt.TxOptions.ReadOnly = readOnly
-		return opt
-	}
-}
-
-func createMutationOptions(opts ...MutationOptionFn) *MutationOptions {
-	opt := &MutationOptions{}
-	for _, fn := range opts {
-		opt = fn(opt)
-	}
-	return opt
-}
-
-func CreateMutation[Args any](fn MutationFnImpl[MutationDB, Args], opts ...MutationOptionFn) MutationFn[MutationDB, Args] {
-	return func(ctx context.Context, args Args) error {
+func CreateValidatedQueryEx[Args any, Ex any, Res any](argsV func(Args) (Args, error), fn QueryExFnImpl[QueryDB, Args, Ex, Res]) QueryExFn[QueryDB, Args, Ex, Res] {
+	var zed Res
+	return func(ctx context.Context, args Args, ex Ex) (Res, error) {
 		c, ok := getQueryCtx(ctx)
 		if !ok {
-			return ErrNoQueryContext
+			return zed, ErrNoQueryContext
 		}
-
-		mut := mutation{
+		args, err := argsV(args)
+		if err != nil {
+			return zed, nil
+		}
+		q := query{
 			ctx:     ctx,
+			db:      c.db,
 			binders: c.binders,
 		}
-
-		opt := createMutationOptions(opts...)
-
-		if tx, ok := c.db.(bun.Tx); ok {
-			mut.tx = tx
-		} else if tx, err := c.db.BeginTx(ctx, &opt.TxOptions); err != nil {
-			return err
-		} else {
-			mut.tx = tx
-		}
-
-		var err error
-		if err = fn(ctx, mut, args); err != nil {
-			if err := mut.tx.Rollback(); err != nil {
-				return err
-			}
-			return err
-		} else if err := mut.tx.Commit(); err != nil {
-			return err
-		}
-
-		return nil
+		return fn(ctx, q, args, ex)
 	}
 }

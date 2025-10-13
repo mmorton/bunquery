@@ -1,4 +1,4 @@
-module github.com/mmorton/bunquery/example/security
+module github.com/mmorton/bunquery/example/validation
 
 replace github.com/mmorton/bunquery => ../..
 

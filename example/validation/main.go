@@ -61,6 +61,18 @@ var GetMyStories = bunquery.CreateQuery(func(ctx context.Context, db bunquery.Qu
 	return stories, nil
 })
 
+type CreateMyStoryArgs struct {
+	Title string
+}
+
+var CreateMyStory = bunquery.CreateValidatedMutation(bunquery.Ident, func(ctx context.Context, db bunquery.MutationDB, args CreateMyStoryArgs) error {
+	story := Story{
+		Title: args.Title,
+	}
+
+	return &story, nil
+})
+
 func main() {
 	ctx := context.Background()
 

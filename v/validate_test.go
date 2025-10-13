@@ -94,3 +94,17 @@ func TestNestedStructValidation(t *testing.T) {
 	err = check(&GetValueArgs{Idx: 5, Nested: Nested{Val: 9}})
 	assert.Error(t, err)
 }
+
+func TestStringLengthValidation(t *testing.T) {
+	type GetValueArgs struct {
+		Value string
+	}
+
+	check := Args(func(set *Set[*GetValueArgs]) {
+		String(set, func(args *GetValueArgs) string { return args.Value }).Length(5)
+	})
+
+	var err error
+	err = check(&GetValueArgs{Value: "hello"})
+	assert.NoError(t, err)
+}
