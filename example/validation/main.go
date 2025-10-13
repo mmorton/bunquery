@@ -11,6 +11,7 @@ import (
 	"github.com/uptrace/bun/extra/bundebug"
 
 	"github.com/mmorton/bunquery"
+	v "github.com/mmorton/bunquery/v"
 )
 
 type securityCtxKey struct{}
@@ -65,7 +66,13 @@ type CreateMyStoryArgs struct {
 	Title string
 }
 
-var CreateMyStory = bunquery.CreateValidatedMutation(bunquery.Ident, func(ctx context.Context, db bunquery.MutationDB, args CreateMyStoryArgs) error {
+var VCreateMyStoryArgs = v.Args(func(set *v.Set[CreateMyStoryArgs]) {
+
+})
+
+var CreateMyStory = bunquery.CreateValidatedQueryMutation(v.Args(func(set *v.Set[CreateMyStoryArgs]) {
+	v.String(set, func(args CreateMyStoryArgs) string { return args.Title }).Min(1).Max(100)
+}), func(ctx context.Context, db bunquery.MutationDB, args CreateMyStoryArgs) (*Story, error) {
 	story := Story{
 		Title: args.Title,
 	}

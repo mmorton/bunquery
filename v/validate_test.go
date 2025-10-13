@@ -16,13 +16,13 @@ func TestBasicValidation(t *testing.T) {
 	})
 
 	var err error
-	err = check(&GetValueArgs{Idx: 6})
+	_, err = check(&GetValueArgs{Idx: 6})
 	assert.NoError(t, err)
 
-	err = check(&GetValueArgs{Idx: 4})
+	_, err = check(&GetValueArgs{Idx: 4})
 	assert.Error(t, err)
 
-	err = check(&GetValueArgs{Idx: 5})
+	_, err = check(&GetValueArgs{Idx: 5})
 	assert.Error(t, err)
 }
 
@@ -36,13 +36,13 @@ func TestMoreReqsValidation(t *testing.T) {
 	})
 
 	var err error
-	err = check(&GetValueArgs{Idx: 6})
+	_, err = check(&GetValueArgs{Idx: 6})
 	assert.NoError(t, err)
 
-	err = check(&GetValueArgs{Idx: 4})
+	_, err = check(&GetValueArgs{Idx: 4})
 	assert.Error(t, err)
 
-	err = check(&GetValueArgs{Idx: 8})
+	_, err = check(&GetValueArgs{Idx: 8})
 	assert.Error(t, err)
 }
 
@@ -58,13 +58,13 @@ func TestMorePropValidation(t *testing.T) {
 	})
 
 	var err error
-	err = check(&GetValueArgs{Idx: 6, Num: 3})
+	_, err = check(&GetValueArgs{Idx: 6, Num: 3})
 	assert.NoError(t, err)
 
-	err = check(&GetValueArgs{Idx: 4, Num: 3})
+	_, err = check(&GetValueArgs{Idx: 4, Num: 3})
 	assert.Error(t, err)
 
-	err = check(&GetValueArgs{Idx: 6, Num: 2})
+	_, err = check(&GetValueArgs{Idx: 6, Num: 2})
 	assert.Error(t, err)
 }
 
@@ -85,13 +85,13 @@ func TestNestedStructValidation(t *testing.T) {
 	})
 
 	var err error
-	err = check(&GetValueArgs{Idx: 6, Nested: Nested{Val: 11}})
+	_, err = check(&GetValueArgs{Idx: 6, Nested: Nested{Val: 11}})
 	assert.NoError(t, err)
 
-	err = check(&GetValueArgs{Idx: 4, Nested: Nested{Val: 11}})
+	_, err = check(&GetValueArgs{Idx: 4, Nested: Nested{Val: 11}})
 	assert.Error(t, err)
 
-	err = check(&GetValueArgs{Idx: 5, Nested: Nested{Val: 9}})
+	_, err = check(&GetValueArgs{Idx: 5, Nested: Nested{Val: 9}})
 	assert.Error(t, err)
 }
 
@@ -105,6 +105,6 @@ func TestStringLengthValidation(t *testing.T) {
 	})
 
 	var err error
-	err = check(&GetValueArgs{Value: "hello"})
+	_, err = check(&GetValueArgs{Value: "hello"})
 	assert.NoError(t, err)
 }

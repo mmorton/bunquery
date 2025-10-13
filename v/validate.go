@@ -142,18 +142,17 @@ func Struct[Source any, Value any](grp *Set[Source], get func(Source) Value, nex
 	next(nextV)
 }
 
-type ValidationFn[Value any] func(Value) error
-
-func Args[Value any](fn func(validator *Set[Value])) ValidationFn[Value] {
+func Args[Value any](fn func(validator *Set[Value])) func(Value) (Value, error) {
+	var zed Value
 	validator := &Set[Value]{}
 	fn(validator)
-	return func(value Value) error {
+	return func(value Value) (Value, error) {
 		for _, check := range validator.validations {
 			if err := check(value); err != nil {
-				return err
+				return zed, err
 			}
 		}
-		return nil
+		return value, nil
 	}
 }
 
