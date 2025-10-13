@@ -130,6 +130,65 @@ func CreateValidatedMutation[Args any](argsV func(Args) (Args, error), fn Mutati
 	}
 }
 
+type MutationExFnImpl[MutationDB any, Args any, Ex any] func(ctx context.Context, db MutationDB, args Args, ex Ex) error
+type MutationExFn[MutationDB any, Args any, Ex any] func(ctx context.Context, args Args, ex Ex) error
+
+func CreateMutationEx[Args any, Ex any](fn MutationExFnImpl[MutationDB, Args, Ex], opts ...MutationOptionFn) MutationExFn[MutationDB, Args, Ex] {
+	return CreateValidatedMutationEx(Ident, fn)
+}
+
+func CreateValidatedMutationEx[Args any, Ex any](argsV func(Args) (Args, error), fn MutationExFnImpl[MutationDB, Args, Ex], opts ...MutationOptionFn) MutationExFn[MutationDB, Args, Ex] {
+	return func(ctx context.Context, args Args, ex Ex) error {
+		c, ok := getQueryCtx(ctx)
+		if !ok {
+			return ErrNoQueryContext
+		}
+
+		args, err := argsV(args)
+		if err != nil {
+			return nil
+		}
+
+		mut := mutation{
+			ctx:     ctx,
+			binders: c.binders,
+		}
+
+		opt := createMutationOptions(opts...)
+		weOwnTx := false
+
+		// If we are already in a Tx, don't create a new one.
+		if tx, ok := c.db.(bun.Tx); ok {
+			mut.tx = tx
+		} else if tx, err := c.db.BeginTx(ctx, &opt.TxOptions); err != nil {
+			return err
+		} else {
+			mut.tx = tx
+			// Since we created a new Tx, create a new query context so Tx can be passed through.
+			ctx = createQueryCtx(ctx, mut.tx, mut.binders)
+			weOwnTx = true
+		}
+
+		err = fn(ctx, mut, args, ex)
+
+		if weOwnTx {
+			if err != nil {
+				if err := mut.tx.Rollback(); err != nil {
+					return err
+				}
+			} else {
+				if err := mut.tx.Commit(); err != nil {
+					return err
+				}
+			}
+		} else {
+			// We don't own the Tx, don't do anything to it.
+		}
+
+		return nil
+	}
+}
+
 type QueryMutationFnImpl[MutationDB any, Args any, Res any] func(ctx context.Context, db MutationDB, args Args) (Res, error)
 type QueryMutationFn[MutationDB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
 
