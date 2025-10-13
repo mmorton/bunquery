@@ -66,15 +66,21 @@ type CreateMyStoryArgs struct {
 	Title string
 }
 
-var VCreateMyStoryArgs = v.Args(func(set *v.Set[CreateMyStoryArgs]) {
-
-})
-
 var CreateMyStory = bunquery.CreateValidatedQueryMutation(v.Args(func(set *v.Set[CreateMyStoryArgs]) {
-	v.String(set, func(args CreateMyStoryArgs) string { return args.Title }).Min(1).Max(100)
+	v.String(set, func(args CreateMyStoryArgs) string { return args.Title }).Min(1).Max(10)
 }), func(ctx context.Context, db bunquery.MutationDB, args CreateMyStoryArgs) (*Story, error) {
+	currentUserID, err := GetCurrentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	story := Story{
-		Title: args.Title,
+		Title:    args.Title,
+		AuthorID: currentUserID,
+	}
+
+	if _, err := db.NewInsert().Model(&story).Exec(ctx); err != nil {
+		return nil, err
 	}
 
 	return &story, nil
@@ -102,6 +108,27 @@ func main() {
 	currentUserID := int64(2)
 	ctx = NewSecurityContext(ctx, currentUserID)
 	ctx = bunquery.NewContext(ctx, db, &SecurityBinder{})
+
+	if stories, err := GetMyStories(ctx, GetMyStoriesArgs{}); err != nil {
+		panic(err)
+	} else {
+		fmt.Printf("all stories: %v\n\n", stories)
+	}
+
+	fmt.Printf("Creating a story with title: %s\n", "My Story")
+	if _, err := CreateMyStory(ctx, CreateMyStoryArgs{Title: "My Story"}); err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("Creating a story with title: %s\n", "")
+	if _, err := CreateMyStory(ctx, CreateMyStoryArgs{Title: ""}); err != nil {
+		fmt.Printf("Expected error: %v\n", err)
+	}
+
+	fmt.Printf("Creating a story with title: %s\n", "")
+	if _, err := CreateMyStory(ctx, CreateMyStoryArgs{Title: "This is a much longer title than is allowed."}); err != nil {
+		fmt.Printf("Expected error: %v\n", err)
+	}
 
 	if stories, err := GetMyStories(ctx, GetMyStoriesArgs{}); err != nil {
 		panic(err)
