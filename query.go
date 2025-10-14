@@ -8,6 +8,8 @@ import (
 
 type QueryDB interface {
 	NewSelect(bindArgs ...any) *bun.SelectQuery
+
+	Use(binds ...QueryBinder) QueryDB
 }
 
 type query struct {
@@ -17,6 +19,14 @@ type query struct {
 }
 
 var _ QueryDB = (*query)(nil)
+
+func (q query) Use(binds ...QueryBinder) QueryDB {
+	return query{
+		ctx:     q.ctx,
+		db:      q.db,
+		binders: q.binders.Use(binds...),
+	}
+}
 
 func (q query) NewSelect(bindArgs ...any) *bun.SelectQuery {
 	return bindSupportedQuery(q.ctx, q.db, q.binders, q.db.NewSelect(), bindArgs...)
@@ -30,10 +40,10 @@ type QueryFnImpl[QueryDB any, Args any, Res any] func(ctx context.Context, db Qu
 type QueryFn[QueryDB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
 
 func CreateQuery[Args any, Res any](fn QueryFnImpl[QueryDB, Args, Res]) QueryFn[QueryDB, Args, Res] {
-	return CreateValidatedQuery(Ident, fn)
+	return CreateQueryV(Ident, fn)
 }
 
-func CreateValidatedQuery[Args any, Res any](argsV func(Args) (Args, error), fn QueryFnImpl[QueryDB, Args, Res]) QueryFn[QueryDB, Args, Res] {
+func CreateQueryV[Args any, Res any](argsV func(Args) (Args, error), fn QueryFnImpl[QueryDB, Args, Res]) QueryFn[QueryDB, Args, Res] {
 	var zed Res
 	return func(ctx context.Context, args Args) (Res, error) {
 		c, ok := getQueryCtx(ctx)
@@ -53,14 +63,14 @@ func CreateValidatedQuery[Args any, Res any](argsV func(Args) (Args, error), fn 
 	}
 }
 
-type QueryExFnImpl[QueryDB any, Args any, Ex any, Res any] func(ctx context.Context, db QueryDB, args Args, ex Ex) (Res, error)
-type QueryExFn[QueryDB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
+type QueryExtendedFnImpl[QueryDB any, Args any, Ex any, Res any] func(ctx context.Context, db QueryDB, args Args, ex Ex) (Res, error)
+type QueryExtendedFn[QueryDB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
 
-func CreateQueryEx[Args any, Ex any, Res any](fn QueryExFnImpl[QueryDB, Args, Ex, Res]) QueryExFn[QueryDB, Args, Ex, Res] {
-	return CreateValidatedQueryEx(Ident, fn)
+func CreateQueryExtended[Args any, Ex any, Res any](fn QueryExtendedFnImpl[QueryDB, Args, Ex, Res]) QueryExtendedFn[QueryDB, Args, Ex, Res] {
+	return CreateQueryExtentedV(Ident, fn)
 }
 
-func CreateValidatedQueryEx[Args any, Ex any, Res any](argsV func(Args) (Args, error), fn QueryExFnImpl[QueryDB, Args, Ex, Res]) QueryExFn[QueryDB, Args, Ex, Res] {
+func CreateQueryExtentedV[Args any, Ex any, Res any](argsV func(Args) (Args, error), fn QueryExtendedFnImpl[QueryDB, Args, Ex, Res]) QueryExtendedFn[QueryDB, Args, Ex, Res] {
 	var zed Res
 	return func(ctx context.Context, args Args, ex Ex) (Res, error) {
 		c, ok := getQueryCtx(ctx)

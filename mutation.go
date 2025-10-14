@@ -8,11 +8,12 @@ import (
 )
 
 type MutationDB interface {
-	QueryDB
-
+	NewSelect(bindArgs ...any) *bun.SelectQuery
 	NewInsert() *bun.InsertQuery
 	NewUpdate(bindArgs ...any) *bun.UpdateQuery
 	NewDelete(bindArgs ...any) *bun.DeleteQuery
+
+	Use(binds ...QueryBinder) MutationDB
 }
 
 type mutation struct {
@@ -22,6 +23,14 @@ type mutation struct {
 }
 
 var _ MutationDB = (*mutation)(nil)
+
+func (mut mutation) Use(binds ...QueryBinder) MutationDB {
+	return mutation{
+		ctx:     mut.ctx,
+		tx:      mut.tx,
+		binders: mut.binders.Use(binds...),
+	}
+}
 
 func (mut mutation) NewSelect(bindArgs ...any) *bun.SelectQuery {
 	return bindSupportedQuery(mut.ctx, mut.tx, mut.binders, mut.tx.NewSelect(), bindArgs...)
@@ -75,10 +84,10 @@ type MutationFnImpl[MutationDB any, Args any] func(ctx context.Context, db Mutat
 type MutationFn[MutationDB any, Args any] func(ctx context.Context, args Args) error
 
 func CreateMutation[Args any](fn MutationFnImpl[MutationDB, Args], opts ...MutationOptionFn) MutationFn[MutationDB, Args] {
-	return CreateValidatedMutation(Ident, fn)
+	return CreateMutationV(Ident, fn)
 }
 
-func CreateValidatedMutation[Args any](argsV func(Args) (Args, error), fn MutationFnImpl[MutationDB, Args], opts ...MutationOptionFn) MutationFn[MutationDB, Args] {
+func CreateMutationV[Args any](argsV func(Args) (Args, error), fn MutationFnImpl[MutationDB, Args], opts ...MutationOptionFn) MutationFn[MutationDB, Args] {
 	return func(ctx context.Context, args Args) error {
 		c, ok := getQueryCtx(ctx)
 		if !ok {
@@ -130,14 +139,14 @@ func CreateValidatedMutation[Args any](argsV func(Args) (Args, error), fn Mutati
 	}
 }
 
-type MutationExFnImpl[MutationDB any, Args any, Ex any] func(ctx context.Context, db MutationDB, args Args, ex Ex) error
-type MutationExFn[MutationDB any, Args any, Ex any] func(ctx context.Context, args Args, ex Ex) error
+type MutationExtendedFnImpl[MutationDB any, Args any, Ex any] func(ctx context.Context, db MutationDB, args Args, ex Ex) error
+type MutationExtendedFn[MutationDB any, Args any, Ex any] func(ctx context.Context, args Args, ex Ex) error
 
-func CreateMutationEx[Args any, Ex any](fn MutationExFnImpl[MutationDB, Args, Ex], opts ...MutationOptionFn) MutationExFn[MutationDB, Args, Ex] {
-	return CreateValidatedMutationEx(Ident, fn)
+func CreateMutationExtended[Args any, Ex any](fn MutationExtendedFnImpl[MutationDB, Args, Ex], opts ...MutationOptionFn) MutationExtendedFn[MutationDB, Args, Ex] {
+	return CreateMutationExtendedV(Ident, fn)
 }
 
-func CreateValidatedMutationEx[Args any, Ex any](argsV func(Args) (Args, error), fn MutationExFnImpl[MutationDB, Args, Ex], opts ...MutationOptionFn) MutationExFn[MutationDB, Args, Ex] {
+func CreateMutationExtendedV[Args any, Ex any](argsV func(Args) (Args, error), fn MutationExtendedFnImpl[MutationDB, Args, Ex], opts ...MutationOptionFn) MutationExtendedFn[MutationDB, Args, Ex] {
 	return func(ctx context.Context, args Args, ex Ex) error {
 		c, ok := getQueryCtx(ctx)
 		if !ok {
@@ -193,10 +202,10 @@ type QueryMutationFnImpl[MutationDB any, Args any, Res any] func(ctx context.Con
 type QueryMutationFn[MutationDB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
 
 func CreateQueryMutation[Args any, Res any](fn QueryMutationFnImpl[MutationDB, Args, Res], opts ...MutationOptionFn) QueryMutationFn[MutationDB, Args, Res] {
-	return CreateValidatedQueryMutation(Ident, fn)
+	return CreateQueryMutationV(Ident, fn)
 }
 
-func CreateValidatedQueryMutation[Args any, Res any](argsV func(Args) (Args, error), fn QueryMutationFnImpl[MutationDB, Args, Res], opts ...MutationOptionFn) QueryMutationFn[MutationDB, Args, Res] {
+func CreateQueryMutationV[Args any, Res any](argsV func(Args) (Args, error), fn QueryMutationFnImpl[MutationDB, Args, Res], opts ...MutationOptionFn) QueryMutationFn[MutationDB, Args, Res] {
 	var zed Res
 	return func(ctx context.Context, args Args) (Res, error) {
 		c, ok := getQueryCtx(ctx)
@@ -249,14 +258,14 @@ func CreateValidatedQueryMutation[Args any, Res any](argsV func(Args) (Args, err
 	}
 }
 
-type QueryMutationExFnImpl[MutationDB any, Args any, Ex any, Res any] func(ctx context.Context, db MutationDB, args Args, ex Ex) (Res, error)
-type QueryMutationExFn[MutationDB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
+type QueryMutationExtendedFnImpl[MutationDB any, Args any, Ex any, Res any] func(ctx context.Context, db MutationDB, args Args, ex Ex) (Res, error)
+type QueryMutationExtendedFn[MutationDB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
 
-func CreateQueryMutationEx[Args any, Ex any, Res any](fn QueryMutationExFnImpl[MutationDB, Args, Ex, Res], opts ...MutationOptionFn) QueryMutationExFn[MutationDB, Args, Ex, Res] {
-	return CreateValidatedQueryMutationEx(Ident, fn)
+func CreateQueryMutationExtended[Args any, Ex any, Res any](fn QueryMutationExtendedFnImpl[MutationDB, Args, Ex, Res], opts ...MutationOptionFn) QueryMutationExtendedFn[MutationDB, Args, Ex, Res] {
+	return CreateQueryMutationExtendedV(Ident, fn)
 }
 
-func CreateValidatedQueryMutationEx[Args any, Ex any, Res any](argsV func(Args) (Args, error), fn QueryMutationExFnImpl[MutationDB, Args, Ex, Res], opts ...MutationOptionFn) QueryMutationExFn[MutationDB, Args, Ex, Res] {
+func CreateQueryMutationExtendedV[Args any, Ex any, Res any](argsV func(Args) (Args, error), fn QueryMutationExtendedFnImpl[MutationDB, Args, Ex, Res], opts ...MutationOptionFn) QueryMutationExtendedFn[MutationDB, Args, Ex, Res] {
 	var zed Res
 	return func(ctx context.Context, args Args, ex Ex) (Res, error) {
 		c, ok := getQueryCtx(ctx)
