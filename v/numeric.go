@@ -146,7 +146,7 @@ func (v *IntegerV[Value]) In(req ...Value) IntegerValidator[Value] {
 func Int[Source any](grp *Set[Source], get func(Source) int) IntegerValidator[int] {
 	intV := &IntegerV[int]{}
 	intV.NumericV = NewNumericV[int, IntegerValidator[int]](intV)
-	grp.validations = append(grp.validations, func(source Source) ErrorSet {
+	grp.validations = append(grp.validations, func(source Source) error {
 		value := get(source)
 		err := intV.Validate(value)
 		return err
@@ -181,7 +181,7 @@ func (v *FloatV[Value]) Eq(check, epsi Value) FloatValidator[Value] {
 func Float[Source any](grp *Set[Source], get func(Source) float64) FloatValidator[float64] {
 	floatV := &FloatV[float64]{}
 	floatV.NumericV = NewNumericV[float64, FloatValidator[float64]](floatV)
-	grp.validations = append(grp.validations, func(source Source) ErrorSet {
+	grp.validations = append(grp.validations, func(source Source) error {
 		value := get(source)
 		err := floatV.Validate(value)
 		return err

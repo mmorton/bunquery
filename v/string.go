@@ -214,7 +214,7 @@ func (v *stringV) Time(layout string) StringValidator {
 func String[Source any](grp *Set[Source], get func(Source) string) StringValidator {
 	stringV := &stringV{}
 	stringV.GenericV = NewGenericV[string, StringValidator](stringV)
-	grp.validations = append(grp.validations, func(source Source) ErrorSet {
+	grp.validations = append(grp.validations, func(source Source) error {
 		value := get(source)
 		err := stringV.Validate(value)
 		return err
