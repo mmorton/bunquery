@@ -66,7 +66,7 @@ type CreateMyStoryArgs struct {
 	Title string
 }
 
-var CreateMyStory = bunquery.CreateValidatedQueryMutation(v.Args(func(set *v.Set[CreateMyStoryArgs]) {
+var CreateMyStory = bunquery.CreateQueryMutationV(v.Args(func(set *v.Set[CreateMyStoryArgs]) {
 	v.String(set, func(args CreateMyStoryArgs) string { return args.Title }).Min(1).Max(10)
 }), func(ctx context.Context, db bunquery.MutationDB, args CreateMyStoryArgs) (*Story, error) {
 	currentUserID, err := GetCurrentUserID(ctx)

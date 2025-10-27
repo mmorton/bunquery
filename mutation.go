@@ -7,11 +7,15 @@ import (
 	"github.com/uptrace/bun"
 )
 
-type MutationDB interface {
-	NewSelect(bindArgs ...any) *bun.SelectQuery
+type MutationCommon interface {
+	QueryCommon
 	NewInsert() *bun.InsertQuery
 	NewUpdate(bindArgs ...any) *bun.UpdateQuery
 	NewDelete(bindArgs ...any) *bun.DeleteQuery
+}
+
+type MutationDB interface {
+	MutationCommon
 
 	Use(binds ...QueryBinder) MutationDB
 }
@@ -80,8 +84,8 @@ func createMutationOptions(opts ...MutationOptionFn) *MutationOptions {
 	return opt
 }
 
-type MutationFnImpl[MutationDB any, Args any] func(ctx context.Context, db MutationDB, args Args) error
-type MutationFn[MutationDB any, Args any] func(ctx context.Context, args Args) error
+type MutationFnImpl[DB any, Args any] func(ctx context.Context, db DB, args Args) error
+type MutationFn[DB any, Args any] func(ctx context.Context, args Args) error
 
 func CreateMutation[Args any](fn MutationFnImpl[MutationDB, Args], opts ...MutationOptionFn) MutationFn[MutationDB, Args] {
 	return CreateMutationV(Ident, fn)
@@ -139,8 +143,8 @@ func CreateMutationV[Args any](argsV func(Args) (Args, error), fn MutationFnImpl
 	}
 }
 
-type MutationExtendedFnImpl[MutationDB any, Args any, Ex any] func(ctx context.Context, db MutationDB, args Args, ex Ex) error
-type MutationExtendedFn[MutationDB any, Args any, Ex any] func(ctx context.Context, args Args, ex Ex) error
+type MutationExtendedFnImpl[DB any, Args any, Ex any] func(ctx context.Context, db DB, args Args, ex Ex) error
+type MutationExtendedFn[DB any, Args any, Ex any] func(ctx context.Context, args Args, ex Ex) error
 
 func CreateMutationExtended[Args any, Ex any](fn MutationExtendedFnImpl[MutationDB, Args, Ex], opts ...MutationOptionFn) MutationExtendedFn[MutationDB, Args, Ex] {
 	return CreateMutationExtendedV(Ident, fn)
@@ -198,8 +202,8 @@ func CreateMutationExtendedV[Args any, Ex any](argsV func(Args) (Args, error), f
 	}
 }
 
-type QueryMutationFnImpl[MutationDB any, Args any, Res any] func(ctx context.Context, db MutationDB, args Args) (Res, error)
-type QueryMutationFn[MutationDB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
+type QueryMutationFnImpl[DB any, Args any, Res any] func(ctx context.Context, db DB, args Args) (Res, error)
+type QueryMutationFn[DB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
 
 func CreateQueryMutation[Args any, Res any](fn QueryMutationFnImpl[MutationDB, Args, Res], opts ...MutationOptionFn) QueryMutationFn[MutationDB, Args, Res] {
 	return CreateQueryMutationV(Ident, fn)
@@ -258,8 +262,8 @@ func CreateQueryMutationV[Args any, Res any](argsV func(Args) (Args, error), fn 
 	}
 }
 
-type QueryMutationExtendedFnImpl[MutationDB any, Args any, Ex any, Res any] func(ctx context.Context, db MutationDB, args Args, ex Ex) (Res, error)
-type QueryMutationExtendedFn[MutationDB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
+type QueryMutationExtendedFnImpl[DB any, Args any, Ex any, Res any] func(ctx context.Context, db DB, args Args, ex Ex) (Res, error)
+type QueryMutationExtendedFn[DB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
 
 func CreateQueryMutationExtended[Args any, Ex any, Res any](fn QueryMutationExtendedFnImpl[MutationDB, Args, Ex, Res], opts ...MutationOptionFn) QueryMutationExtendedFn[MutationDB, Args, Ex, Res] {
 	return CreateQueryMutationExtendedV(Ident, fn)

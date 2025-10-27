@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/samber/lo"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/sqlitedialect"
 	"github.com/uptrace/bun/driver/sqliteshim"
@@ -13,51 +14,17 @@ import (
 	"github.com/mmorton/bunquery"
 )
 
-type GetUsersArgs struct {
-	Limit int
-}
-
-var GetUsers = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, args GetUsersArgs) ([]User, error) {
-	users := make([]User, args.Limit)
-	if err := db.NewSelect().Model(&users).OrderExpr("id ASC").Limit(args.Limit).Scan(ctx); err != nil {
-		return nil, err
-	}
-	return users, nil
-})
-
-func getUserByID(ctx context.Context, db bunquery.QueryCommon, id int64) (*User, error) {
+var GetUser = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, id int64) (*User, error) {
 	user := new(User)
 	if err := db.NewSelect().Model(user).Where("id = ?", id).Scan(ctx); err != nil {
 		return nil, err
 	}
 	return user, nil
-}
-
-type GetUserArgs struct {
-	ID int64
-}
-
-var GetUser = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, args GetUserArgs) (*User, error) {
-	user := new(User)
-	if err := db.NewSelect().Model(user).Where("id = ?", args.ID).Scan(ctx); err != nil {
-		return nil, err
-	}
-	return user, nil
 })
 
-type UpdateUserArgs struct {
-	ID   int64
-	Name string
-}
-
-var UpdateUser = bunquery.CreateMutation(func(ctx context.Context, db bunquery.MutationDB, args UpdateUserArgs) error {
-	if user, err := getUserByID(ctx, db, args.ID); err != nil {
+var UpdateUser = bunquery.CreateMutation(func(ctx context.Context, db bunquery.MutationDB, patch *UserPatch) error {
+	if _, err := db.NewUpdate().Apply(patch.Compile()).Exec(ctx); err != nil {
 		return err
-	} else {
-		user.Name = args.Name
-		if _, err := db.NewUpdate().Model(user).WherePK().Exec(ctx); err != nil {
-			return err
-		}
 	}
 	return nil
 })
@@ -83,23 +50,20 @@ func main() {
 
 	ctx = bunquery.NewContext(ctx, db)
 
-	// Select all users.
-	if users, err := GetUsers(ctx, GetUsersArgs{Limit: 10}); err != nil {
-		panic(err)
-	} else {
-		fmt.Printf("all users: %v\n\n", users)
-	}
-
 	// Select one user by primary key.
-	if user, err := GetUser(ctx, GetUserArgs{ID: 1}); err != nil {
+	user, err := GetUser(ctx, 1)
+	if err != nil {
 		panic(err)
 	} else {
 		fmt.Printf("user1: %v\n\n", user)
 	}
 
-	if err := UpdateUser(ctx, UpdateUserArgs{ID: 1, Name: "admin_new_name"}); err != nil {
+	patch := NewUserPatch(user)
+	patch.Name = lo.ToPtr("NEW NAME")
+
+	if err := UpdateUser(ctx, patch); err != nil {
 		panic(err)
-	} else if user, err := GetUser(ctx, GetUserArgs{ID: 1}); err != nil {
+	} else if user, err := GetUser(ctx, 1); err != nil {
 		panic(err)
 	} else {
 		fmt.Printf("user1: %v\n\n", user)
@@ -114,6 +78,19 @@ type User struct {
 
 func (u User) String() string {
 	return fmt.Sprintf("User<%d %s %v>", u.ID, u.Name, u.Emails)
+}
+
+type UserPatch struct {
+	bunquery.Patch[User, UserPatch]
+
+	Name   *string
+	Emails *[]string
+}
+
+func NewUserPatch(user *User) *UserPatch {
+	res := &UserPatch{}
+	res.Patch = bunquery.CreatePatch(user, res)
+	return res
 }
 
 func resetSchema(ctx context.Context, db *bun.DB) error {

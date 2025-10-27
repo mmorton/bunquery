@@ -6,9 +6,12 @@ import (
 	"github.com/uptrace/bun"
 )
 
-type QueryDB interface {
+type QueryCommon interface {
 	NewSelect(bindArgs ...any) *bun.SelectQuery
+}
 
+type QueryDB interface {
+	QueryCommon
 	Use(binds ...QueryBinder) QueryDB
 }
 
@@ -36,8 +39,8 @@ func Ident[Args any](args Args) (Args, error) {
 	return args, nil
 }
 
-type QueryFnImpl[QueryDB any, Args any, Res any] func(ctx context.Context, db QueryDB, args Args) (Res, error)
-type QueryFn[QueryDB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
+type QueryFnImpl[DB any, Args any, Res any] func(ctx context.Context, db DB, args Args) (Res, error)
+type QueryFn[DB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
 
 func CreateQuery[Args any, Res any](fn QueryFnImpl[QueryDB, Args, Res]) QueryFn[QueryDB, Args, Res] {
 	return CreateQueryV(Ident, fn)
@@ -63,14 +66,14 @@ func CreateQueryV[Args any, Res any](argsV func(Args) (Args, error), fn QueryFnI
 	}
 }
 
-type QueryExtendedFnImpl[QueryDB any, Args any, Ex any, Res any] func(ctx context.Context, db QueryDB, args Args, ex Ex) (Res, error)
-type QueryExtendedFn[QueryDB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
+type QueryExtendedFnImpl[DB any, Args any, Ex any, Res any] func(ctx context.Context, db DB, args Args, ex Ex) (Res, error)
+type QueryExtendedFn[DB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
 
 func CreateQueryExtended[Args any, Ex any, Res any](fn QueryExtendedFnImpl[QueryDB, Args, Ex, Res]) QueryExtendedFn[QueryDB, Args, Ex, Res] {
-	return CreateQueryExtentedV(Ident, fn)
+	return CreateQueryExtendedV(Ident, fn)
 }
 
-func CreateQueryExtentedV[Args any, Ex any, Res any](argsV func(Args) (Args, error), fn QueryExtendedFnImpl[QueryDB, Args, Ex, Res]) QueryExtendedFn[QueryDB, Args, Ex, Res] {
+func CreateQueryExtendedV[Args any, Ex any, Res any](argsV func(Args) (Args, error), fn QueryExtendedFnImpl[QueryDB, Args, Ex, Res]) QueryExtendedFn[QueryDB, Args, Ex, Res] {
 	var zed Res
 	return func(ctx context.Context, args Args, ex Ex) (Res, error) {
 		c, ok := getQueryCtx(ctx)
