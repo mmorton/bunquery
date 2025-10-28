@@ -56,7 +56,7 @@ func (patch *Patch[Target, Derived]) Compile() func(*bun.UpdateQuery) *bun.Updat
 				}
 			}
 
-			col := Underscore(field.Name)
+			col := PascalToDelimited(field.Name, "_")
 
 			query = query.Set("? = ?", bun.Ident(col), value.Interface())
 		}

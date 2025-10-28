@@ -20,7 +20,7 @@ func TestUnderscore(t *testing.T) {
 	for _, tt := range tests {
 		testname := fmt.Sprintf("%s", tt.a)
 		t.Run(testname, func(t *testing.T) {
-			ans := bunquery.Underscore(tt.a)
+			ans := bunquery.PascalToDelimited(tt.a, "_")
 			if ans != tt.want {
 				t.Errorf("got %s, want %s", ans, tt.want)
 			}

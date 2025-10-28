@@ -2,7 +2,7 @@ package bunquery
 
 import "strings"
 
-func Underscore(s string) string {
+func PascalToDelimited(s string, delim string) string {
 	var b strings.Builder
 	b.Grow(len(s) + 3)
 	low := 0
@@ -10,7 +10,7 @@ func Underscore(s string) string {
 		c := s[i]
 		if 'A' <= c && c <= 'Z' {
 			if low > 0 {
-				b.WriteByte('_')
+				b.WriteString(delim)
 				low = 0
 			}
 			b.WriteByte(c + ('a' - 'A'))
