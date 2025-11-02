@@ -15,23 +15,23 @@ type QueryDB interface {
 	Use(binds ...QueryBinder) QueryDB
 }
 
-type query struct {
+type wrapQueryDB struct {
 	ctx     context.Context
 	db      bun.IDB
 	binders QueryBindings
 }
 
-var _ QueryDB = (*query)(nil)
+var _ QueryDB = (*wrapQueryDB)(nil)
 
-func (q query) Use(binds ...QueryBinder) QueryDB {
-	return query{
+func (q wrapQueryDB) Use(binds ...QueryBinder) QueryDB {
+	return wrapQueryDB{
 		ctx:     q.ctx,
 		db:      q.db,
 		binders: q.binders.Use(binds...),
 	}
 }
 
-func (q query) NewSelect(bindArgs ...any) *bun.SelectQuery {
+func (q wrapQueryDB) NewSelect(bindArgs ...any) *bun.SelectQuery {
 	return bindSupportedQuery(q.ctx, q.db, q.binders, q.db.NewSelect(), bindArgs...)
 }
 
@@ -39,56 +39,58 @@ func Ident[Args any](args Args) (Args, error) {
 	return args, nil
 }
 
-type QueryFnImpl[DB any, Args any, Res any] func(ctx context.Context, db DB, args Args) (Res, error)
-type QueryFn[DB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
-
-func CreateQuery[Args any, Res any](fn QueryFnImpl[QueryDB, Args, Res]) QueryFn[QueryDB, Args, Res] {
-	return CreateQueryV(Ident, fn)
+type Query[In any, Out any] struct {
+	Args    func(args In) (In, error)
+	Handler func(ctx context.Context, db QueryDB, args In) (Out, error)
 }
 
-func CreateQueryV[Args any, Res any](argsV func(Args) (Args, error), fn QueryFnImpl[QueryDB, Args, Res]) QueryFn[QueryDB, Args, Res] {
-	var zed Res
-	return func(ctx context.Context, args Args) (Res, error) {
-		c, ok := getQueryCtx(ctx)
+type QueryWithOpts[In any, Out any, Opts any] struct {
+	Args    func(args In) (In, error)
+	Handler func(ctx context.Context, db QueryDB, args In, opts Opts) (Out, error)
+}
+
+func CreateQuery[In any, Out any](def Query[In, Out]) func(ctx context.Context, args In) (Out, error) {
+	var zero Out
+	return func(ctx context.Context, args In) (Out, error) {
+		var err error
+		dbCtx, ok := getDbCtx(ctx)
 		if !ok {
-			return zed, ErrNoQueryContext
+			return zero, ErrNoContext
 		}
-		args, err := argsV(args)
-		if err != nil {
-			return zed, nil
+		if def.Args != nil {
+			args, err = def.Args(args)
+			if err != nil {
+				return zero, err
+			}
 		}
-		q := query{
+		qDB := wrapQueryDB{
 			ctx:     ctx,
-			db:      c.db,
-			binders: c.binders,
+			db:      dbCtx.db,
+			binders: dbCtx.binders,
 		}
-		return fn(ctx, q, args)
+		return def.Handler(ctx, qDB, args)
 	}
 }
 
-type QueryExtendedFnImpl[DB any, Args any, Ex any, Res any] func(ctx context.Context, db DB, args Args, ex Ex) (Res, error)
-type QueryExtendedFn[DB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
-
-func CreateQueryExtended[Args any, Ex any, Res any](fn QueryExtendedFnImpl[QueryDB, Args, Ex, Res]) QueryExtendedFn[QueryDB, Args, Ex, Res] {
-	return CreateQueryExtendedV(Ident, fn)
-}
-
-func CreateQueryExtendedV[Args any, Ex any, Res any](argsV func(Args) (Args, error), fn QueryExtendedFnImpl[QueryDB, Args, Ex, Res]) QueryExtendedFn[QueryDB, Args, Ex, Res] {
-	var zed Res
-	return func(ctx context.Context, args Args, ex Ex) (Res, error) {
-		c, ok := getQueryCtx(ctx)
+func CreateQueryWithOpts[In any, Out any, Opts any](def QueryWithOpts[In, Out, Opts]) func(ctx context.Context, args In, opts Opts) (Out, error) {
+	var zero Out
+	return func(ctx context.Context, args In, opts Opts) (Out, error) {
+		var err error
+		dbCtx, ok := getDbCtx(ctx)
 		if !ok {
-			return zed, ErrNoQueryContext
+			return zero, ErrNoContext
 		}
-		args, err := argsV(args)
-		if err != nil {
-			return zed, nil
+		if def.Args != nil {
+			args, err = def.Args(args)
+			if err != nil {
+				return zero, err
+			}
 		}
-		q := query{
+		qDB := wrapQueryDB{
 			ctx:     ctx,
-			db:      c.db,
-			binders: c.binders,
+			db:      dbCtx.db,
+			binders: dbCtx.binders,
 		}
-		return fn(ctx, q, args, ex)
+		return def.Handler(ctx, qDB, args, opts)
 	}
 }

@@ -14,19 +14,23 @@ import (
 	"github.com/mmorton/bunquery"
 )
 
-var GetUser = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, id int64) (*User, error) {
-	user := new(User)
-	if err := db.NewSelect().Model(user).Where("id = ?", id).Scan(ctx); err != nil {
-		return nil, err
-	}
-	return user, nil
+var GetUser = bunquery.CreateQuery(bunquery.Query[int64, *User]{
+	Handler: func(ctx context.Context, db bunquery.QueryDB, id int64) (*User, error) {
+		user := new(User)
+		if err := db.NewSelect().Model(user).Where("id = ?", id).Scan(ctx); err != nil {
+			return nil, err
+		}
+		return user, nil
+	},
 })
 
-var UpdateUser = bunquery.CreateMutation(func(ctx context.Context, db bunquery.MutationDB, patch *UserPatch) error {
-	if _, err := db.NewUpdate().Apply(patch.Compile()).Exec(ctx); err != nil {
-		return err
-	}
-	return nil
+var UpdateUser = bunquery.CreateMutation(bunquery.Mutation[*UserPatch]{
+	Handler: func(ctx context.Context, db bunquery.MutationDB, patch *UserPatch) error {
+		if _, err := db.NewUpdate().Apply(patch.Compile()).Exec(ctx); err != nil {
+			return err
+		}
+		return nil
+	},
 })
 
 func main() {

@@ -53,12 +53,14 @@ func (sb *SecurityBinder) Bind(ctx context.Context, db bun.IDB, qry bunquery.Que
 type GetMyStoriesArgs struct {
 }
 
-var GetMyStories = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, args GetMyStoriesArgs) ([]Story, error) {
-	stories := make([]Story, 0)
-	if err := db.NewSelect().Model(&stories).Relation("Author").OrderExpr("story.id ASC").Scan(ctx); err != nil {
-		return nil, err
-	}
-	return stories, nil
+var GetMyStories = bunquery.CreateQuery(bunquery.Query[GetMyStoriesArgs, []Story]{
+	Handler: func(ctx context.Context, db bunquery.QueryDB, args GetMyStoriesArgs) ([]Story, error) {
+		stories := make([]Story, 0)
+		if err := db.NewSelect().Model(&stories).Relation("Author").OrderExpr("story.id ASC").Scan(ctx); err != nil {
+			return nil, err
+		}
+		return stories, nil
+	},
 })
 
 func main() {

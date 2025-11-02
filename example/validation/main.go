@@ -54,36 +54,41 @@ func (sb *SecurityBinder) Bind(ctx context.Context, db bun.IDB, qry bunquery.Que
 type GetMyStoriesArgs struct {
 }
 
-var GetMyStories = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, args GetMyStoriesArgs) ([]Story, error) {
-	stories := make([]Story, 0)
-	if err := db.NewSelect().Model(&stories).Relation("Author").OrderExpr("story.id ASC").Scan(ctx); err != nil {
-		return nil, err
-	}
-	return stories, nil
+var GetMyStories = bunquery.CreateQuery(bunquery.Query[GetMyStoriesArgs, []Story]{
+	Handler: func(ctx context.Context, db bunquery.QueryDB, args GetMyStoriesArgs) ([]Story, error) {
+		stories := make([]Story, 0)
+		if err := db.NewSelect().Model(&stories).Relation("Author").OrderExpr("story.id ASC").Scan(ctx); err != nil {
+			return nil, err
+		}
+		return stories, nil
+	},
 })
 
 type CreateMyStoryArgs struct {
 	Title string
 }
 
-var CreateMyStory = bunquery.CreateQueryMutationV(v.Args(func(set *v.Set[CreateMyStoryArgs]) {
-	v.String(set, func(args CreateMyStoryArgs) string { return args.Title }).Min(1).Max(10)
-}), func(ctx context.Context, db bunquery.MutationDB, args CreateMyStoryArgs) (*Story, error) {
-	currentUserID, err := GetCurrentUserID(ctx)
-	if err != nil {
-		return nil, err
-	}
+var CreateMyStory = bunquery.CreateQueryMutation(bunquery.QueryMutation[CreateMyStoryArgs, *Story]{
+	Args: v.Args(func(set *v.Set[CreateMyStoryArgs]) {
+		v.String(set, func(args CreateMyStoryArgs) string { return args.Title }).Min(1).Max(10)
+	}),
+	Handler: func(ctx context.Context, db bunquery.MutationDB, args CreateMyStoryArgs) (*Story, error) {
+		currentUserID, err := GetCurrentUserID(ctx)
+		if err != nil {
+			return nil, err
+		}
 
-	story := Story{
-		Title:    args.Title,
-		AuthorID: currentUserID,
-	}
+		story := Story{
+			Title:    args.Title,
+			AuthorID: currentUserID,
+		}
 
-	if _, err := db.NewInsert().Model(&story).Exec(ctx); err != nil {
-		return nil, err
-	}
+		if _, err := db.NewInsert().Model(&story).Exec(ctx); err != nil {
+			return nil, err
+		}
 
-	return &story, nil
+		return &story, nil
+	},
 })
 
 func main() {

@@ -7,26 +7,33 @@ import (
 	"github.com/uptrace/bun"
 )
 
-type queryCtxKey struct{}
-type queryCtx struct {
+type dbCtxKey struct{}
+type dbCtx struct {
 	db      bun.IDB
 	binders QueryBindings
 }
 
-func NewContext(ctx context.Context, db bun.IDB, binds ...QueryBinder) context.Context {
-	return createQueryCtx(ctx, db, NewQueryBindings(binds...))
-}
+var ErrNoContext = errors.New("No db context.")
 
-var ErrNoQueryContext = errors.New("No query context.")
-
-func getQueryCtx(ctx context.Context) (*queryCtx, bool) {
-	qctx, ok := ctx.Value(queryCtxKey{}).(*queryCtx)
+func getDbCtx(ctx context.Context) (*dbCtx, bool) {
+	qctx, ok := ctx.Value(dbCtxKey{}).(*dbCtx)
 	return qctx, ok
 }
 
-func createQueryCtx(ctx context.Context, db bun.IDB, bindings QueryBindings) context.Context {
-	return context.WithValue(ctx, queryCtxKey{}, &queryCtx{
+func createDbCtx(ctx context.Context, db bun.IDB, bindings QueryBindings) context.Context {
+	return context.WithValue(ctx, dbCtxKey{}, &dbCtx{
 		db:      db,
 		binders: bindings,
 	})
+}
+
+func NewContext(ctx context.Context, db bun.IDB, binds ...QueryBinder) context.Context {
+	return createDbCtx(ctx, db, NewQueryBindings(binds...))
+}
+
+func BindContext(ctx context.Context, binds ...QueryBinder) (context.Context, error) {
+	if dbCtx, ok := getDbCtx(ctx); ok {
+		return createDbCtx(ctx, dbCtx.db, NewQueryBindings(binds...)), nil
+	}
+	return ctx, ErrNoContext
 }

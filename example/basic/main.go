@@ -17,12 +17,14 @@ type GetUsersArgs struct {
 	Limit int
 }
 
-var GetUsers = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, args GetUsersArgs) ([]User, error) {
-	users := make([]User, args.Limit)
-	if err := db.NewSelect().Model(&users).OrderExpr("id ASC").Limit(args.Limit).Scan(ctx); err != nil {
-		return nil, err
-	}
-	return users, nil
+var GetUsers = bunquery.CreateQuery(bunquery.Query[*GetUsersArgs, []*User]{
+	Handler: func(ctx context.Context, db bunquery.QueryDB, args *GetUsersArgs) ([]*User, error) {
+		users := make([]*User, args.Limit)
+		if err := db.NewSelect().Model(&users).OrderExpr("id ASC").Limit(args.Limit).Scan(ctx); err != nil {
+			return nil, err
+		}
+		return users, nil
+	},
 })
 
 func getUserByID(ctx context.Context, db bunquery.QueryCommon, id int64) (*User, error) {
@@ -37,12 +39,14 @@ type GetUserArgs struct {
 	ID int64
 }
 
-var GetUser = bunquery.CreateQuery(func(ctx context.Context, db bunquery.QueryDB, args GetUserArgs) (*User, error) {
-	user := new(User)
-	if err := db.NewSelect().Model(user).Where("id = ?", args.ID).Scan(ctx); err != nil {
-		return nil, err
-	}
-	return user, nil
+var GetUser = bunquery.CreateQuery(bunquery.Query[*GetUserArgs, *User]{
+	Handler: func(ctx context.Context, db bunquery.QueryDB, args *GetUserArgs) (*User, error) {
+		user := new(User)
+		if err := db.NewSelect().Model(user).Where("id = ?", args.ID).Scan(ctx); err != nil {
+			return nil, err
+		}
+		return user, nil
+	},
 })
 
 type UpdateUserArgs struct {
@@ -50,16 +54,18 @@ type UpdateUserArgs struct {
 	Name string
 }
 
-var UpdateUser = bunquery.CreateMutation(func(ctx context.Context, db bunquery.MutationDB, args UpdateUserArgs) error {
-	if user, err := getUserByID(ctx, db, args.ID); err != nil {
-		return err
-	} else {
+var UpdateUser = bunquery.CreateMutation(bunquery.Mutation[*UpdateUserArgs]{
+	Handler: func(ctx context.Context, db bunquery.MutationDB, args *UpdateUserArgs) error {
+		user := new(User)
+		if err := db.NewSelect().Model(user).Where("id = ?", args.ID).Scan(ctx); err != nil {
+			return err
+		}
 		user.Name = args.Name
 		if _, err := db.NewUpdate().Model(user).WherePK().Exec(ctx); err != nil {
 			return err
 		}
-	}
-	return nil
+		return nil
+	},
 })
 
 func main() {
@@ -84,22 +90,22 @@ func main() {
 	ctx = bunquery.NewContext(ctx, db)
 
 	// Select all users.
-	if users, err := GetUsers(ctx, GetUsersArgs{Limit: 10}); err != nil {
+	if users, err := GetUsers(ctx, &GetUsersArgs{Limit: 10}); err != nil {
 		panic(err)
 	} else {
 		fmt.Printf("all users: %v\n\n", users)
 	}
 
 	// Select one user by primary key.
-	if user, err := GetUser(ctx, GetUserArgs{ID: 1}); err != nil {
+	if user, err := GetUser(ctx, &GetUserArgs{ID: 1}); err != nil {
 		panic(err)
 	} else {
 		fmt.Printf("user1: %v\n\n", user)
 	}
 
-	if err := UpdateUser(ctx, UpdateUserArgs{ID: 1, Name: "admin_new_name"}); err != nil {
+	if err := UpdateUser(ctx, &UpdateUserArgs{ID: 1, Name: "admin_new_name"}); err != nil {
 		panic(err)
-	} else if user, err := GetUser(ctx, GetUserArgs{ID: 1}); err != nil {
+	} else if user, err := GetUser(ctx, &GetUserArgs{ID: 1}); err != nil {
 		panic(err)
 	} else {
 		fmt.Printf("user1: %v\n\n", user)

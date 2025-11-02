@@ -20,35 +20,35 @@ type MutationDB interface {
 	Use(binds ...QueryBinder) MutationDB
 }
 
-type mutation struct {
+type wrapMutationDB struct {
 	ctx     context.Context
 	tx      bun.Tx
 	binders QueryBindings
 }
 
-var _ MutationDB = (*mutation)(nil)
+var _ MutationDB = (*wrapMutationDB)(nil)
 
-func (mut mutation) Use(binds ...QueryBinder) MutationDB {
-	return mutation{
+func (mut wrapMutationDB) Use(binds ...QueryBinder) MutationDB {
+	return wrapMutationDB{
 		ctx:     mut.ctx,
 		tx:      mut.tx,
 		binders: mut.binders.Use(binds...),
 	}
 }
 
-func (mut mutation) NewSelect(bindArgs ...any) *bun.SelectQuery {
+func (mut wrapMutationDB) NewSelect(bindArgs ...any) *bun.SelectQuery {
 	return bindSupportedQuery(mut.ctx, mut.tx, mut.binders, mut.tx.NewSelect(), bindArgs...)
 }
 
-func (mut mutation) NewInsert() *bun.InsertQuery {
+func (mut wrapMutationDB) NewInsert() *bun.InsertQuery {
 	return mut.tx.NewInsert()
 }
 
-func (mut mutation) NewUpdate(bindArgs ...any) *bun.UpdateQuery {
+func (mut wrapMutationDB) NewUpdate(bindArgs ...any) *bun.UpdateQuery {
 	return bindSupportedQuery(mut.ctx, mut.tx, mut.binders, mut.tx.NewUpdate(), bindArgs...)
 }
 
-func (mut mutation) NewDelete(bindArgs ...any) *bun.DeleteQuery {
+func (mut wrapMutationDB) NewDelete(bindArgs ...any) *bun.DeleteQuery {
 	return bindSupportedQuery(mut.ctx, mut.tx, mut.binders, mut.tx.NewDelete(), bindArgs...)
 }
 
@@ -84,46 +84,51 @@ func createMutationOptions(opts ...MutationOptionFn) *MutationOptions {
 	return opt
 }
 
-type MutationFnImpl[DB any, Args any] func(ctx context.Context, db DB, args Args) error
-type MutationFn[DB any, Args any] func(ctx context.Context, args Args) error
-
-func CreateMutation[Args any](fn MutationFnImpl[MutationDB, Args], opts ...MutationOptionFn) MutationFn[MutationDB, Args] {
-	return CreateMutationV(Ident, fn)
+type Mutation[In any] struct {
+	Args      func(args In) (In, error)
+	Handler   func(ctx context.Context, db MutationDB, args In) error
+	TxOptions *sql.TxOptions
 }
 
-func CreateMutationV[Args any](argsV func(Args) (Args, error), fn MutationFnImpl[MutationDB, Args], opts ...MutationOptionFn) MutationFn[MutationDB, Args] {
-	return func(ctx context.Context, args Args) error {
-		c, ok := getQueryCtx(ctx)
+type MutationWithOpts[In any, Opts any] struct {
+	Args      func(args In) (In, error)
+	Handler   func(ctx context.Context, db MutationDB, args In, opts Opts) error
+	TxOptions *sql.TxOptions
+}
+
+func CreateMutation[In any](def Mutation[In]) func(ctx context.Context, args In) error {
+	return func(ctx context.Context, args In) error {
+		var err error
+		dbCtx, ok := getDbCtx(ctx)
 		if !ok {
-			return ErrNoQueryContext
+			return ErrNoContext
 		}
-
-		args, err := argsV(args)
-		if err != nil {
-			return nil
+		if def.Args != nil {
+			args, err = def.Args(args)
+			if err != nil {
+				return err
+			}
 		}
-
-		mut := mutation{
+		mut := wrapMutationDB{
 			ctx:     ctx,
-			binders: c.binders,
+			binders: dbCtx.binders,
 		}
 
-		opt := createMutationOptions(opts...)
 		weOwnTx := false
 
 		// If we are already in a Tx, don't create a new one.
-		if tx, ok := c.db.(bun.Tx); ok {
+		if tx, ok := dbCtx.db.(bun.Tx); ok {
 			mut.tx = tx
-		} else if tx, err := c.db.BeginTx(ctx, &opt.TxOptions); err != nil {
+		} else if tx, err := dbCtx.db.BeginTx(ctx, def.TxOptions); err != nil {
 			return err
 		} else {
 			mut.tx = tx
 			// Since we created a new Tx, create a new query context so Tx can be passed through.
-			ctx = createQueryCtx(ctx, mut.tx, mut.binders)
+			ctx = createDbCtx(ctx, mut.tx, mut.binders)
 			weOwnTx = true
 		}
 
-		err = fn(ctx, mut, args)
+		err = def.Handler(ctx, mut, args)
 
 		if weOwnTx {
 			if err != nil {
@@ -136,53 +141,46 @@ func CreateMutationV[Args any](argsV func(Args) (Args, error), fn MutationFnImpl
 				}
 			}
 		} else {
-			// We don't own the Tx, don't do anything to it.
+			// We don't own the Tx, do not touch.
 		}
 
 		return nil
 	}
 }
 
-type MutationExtendedFnImpl[DB any, Args any, Ex any] func(ctx context.Context, db DB, args Args, ex Ex) error
-type MutationExtendedFn[DB any, Args any, Ex any] func(ctx context.Context, args Args, ex Ex) error
-
-func CreateMutationExtended[Args any, Ex any](fn MutationExtendedFnImpl[MutationDB, Args, Ex], opts ...MutationOptionFn) MutationExtendedFn[MutationDB, Args, Ex] {
-	return CreateMutationExtendedV(Ident, fn)
-}
-
-func CreateMutationExtendedV[Args any, Ex any](argsV func(Args) (Args, error), fn MutationExtendedFnImpl[MutationDB, Args, Ex], opts ...MutationOptionFn) MutationExtendedFn[MutationDB, Args, Ex] {
-	return func(ctx context.Context, args Args, ex Ex) error {
-		c, ok := getQueryCtx(ctx)
+func CreateMutationWithOpts[In any, Opts any](def MutationWithOpts[In, Opts]) func(ctx context.Context, args In, opts Opts) error {
+	return func(ctx context.Context, args In, opts Opts) error {
+		var err error
+		dbCtx, ok := getDbCtx(ctx)
 		if !ok {
-			return ErrNoQueryContext
+			return ErrNoContext
 		}
-
-		args, err := argsV(args)
-		if err != nil {
-			return nil
+		if def.Args != nil {
+			args, err = def.Args(args)
+			if err != nil {
+				return err
+			}
 		}
-
-		mut := mutation{
+		mut := wrapMutationDB{
 			ctx:     ctx,
-			binders: c.binders,
+			binders: dbCtx.binders,
 		}
 
-		opt := createMutationOptions(opts...)
 		weOwnTx := false
 
 		// If we are already in a Tx, don't create a new one.
-		if tx, ok := c.db.(bun.Tx); ok {
+		if tx, ok := dbCtx.db.(bun.Tx); ok {
 			mut.tx = tx
-		} else if tx, err := c.db.BeginTx(ctx, &opt.TxOptions); err != nil {
+		} else if tx, err := dbCtx.db.BeginTx(ctx, def.TxOptions); err != nil {
 			return err
 		} else {
 			mut.tx = tx
 			// Since we created a new Tx, create a new query context so Tx can be passed through.
-			ctx = createQueryCtx(ctx, mut.tx, mut.binders)
+			ctx = createDbCtx(ctx, mut.tx, mut.binders)
 			weOwnTx = true
 		}
 
-		err = fn(ctx, mut, args, ex)
+		err = def.Handler(ctx, mut, args, opts)
 
 		if weOwnTx {
 			if err != nil {
@@ -195,129 +193,127 @@ func CreateMutationExtendedV[Args any, Ex any](argsV func(Args) (Args, error), f
 				}
 			}
 		} else {
-			// We don't own the Tx, don't do anything to it.
+			// We don't own the Tx, do not touch.
 		}
 
 		return nil
 	}
 }
 
-type QueryMutationFnImpl[DB any, Args any, Res any] func(ctx context.Context, db DB, args Args) (Res, error)
-type QueryMutationFn[DB any, Args any, Res any] func(ctx context.Context, args Args) (Res, error)
-
-func CreateQueryMutation[Args any, Res any](fn QueryMutationFnImpl[MutationDB, Args, Res], opts ...MutationOptionFn) QueryMutationFn[MutationDB, Args, Res] {
-	return CreateQueryMutationV(Ident, fn)
+type QueryMutation[In any, Out any] struct {
+	Args      func(args In) (In, error)
+	Handler   func(ctx context.Context, db MutationDB, args In) (Out, error)
+	TxOptions *sql.TxOptions
 }
 
-func CreateQueryMutationV[Args any, Res any](argsV func(Args) (Args, error), fn QueryMutationFnImpl[MutationDB, Args, Res], opts ...MutationOptionFn) QueryMutationFn[MutationDB, Args, Res] {
-	var zed Res
-	return func(ctx context.Context, args Args) (Res, error) {
-		c, ok := getQueryCtx(ctx)
+type QueryMutationWithOpts[In any, Out any, Opts any] struct {
+	Args      func(args In) (In, error)
+	Handler   func(ctx context.Context, db MutationDB, args In, opts Opts) (Out, error)
+	TxOptions *sql.TxOptions
+}
+
+func CreateQueryMutation[In any, Out any](def QueryMutation[In, Out]) func(ctx context.Context, args In) (Out, error) {
+	var res Out
+	return func(ctx context.Context, args In) (Out, error) {
+		var err error
+		dbCtx, ok := getDbCtx(ctx)
 		if !ok {
-			return zed, ErrNoQueryContext
+			return res, ErrNoContext
 		}
-
-		args, err := argsV(args)
-		if err != nil {
-			return zed, err
+		if def.Args != nil {
+			args, err = def.Args(args)
+			if err != nil {
+				return res, err
+			}
 		}
-
-		mut := mutation{
+		mut := wrapMutationDB{
 			ctx:     ctx,
-			binders: c.binders,
+			binders: dbCtx.binders,
 		}
 
-		opt := createMutationOptions(opts...)
 		weOwnTx := false
 
 		// If we are already in a Tx, don't create a new one.
-		if tx, ok := c.db.(bun.Tx); ok {
+		if tx, ok := dbCtx.db.(bun.Tx); ok {
 			mut.tx = tx
-		} else if tx, err := c.db.BeginTx(ctx, &opt.TxOptions); err != nil {
-			return zed, err
+		} else if tx, err := dbCtx.db.BeginTx(ctx, def.TxOptions); err != nil {
+			return res, err
 		} else {
 			mut.tx = tx
 			// Since we created a new Tx, create a new query context so Tx can be passed through.
-			ctx = createQueryCtx(ctx, mut.tx, mut.binders)
+			ctx = createDbCtx(ctx, mut.tx, mut.binders)
 			weOwnTx = true
 		}
 
-		res, err := fn(ctx, mut, args)
+		res, err = def.Handler(ctx, mut, args)
 
 		if weOwnTx {
 			if err != nil {
 				if err := mut.tx.Rollback(); err != nil {
-					return zed, err
+					return res, err
 				}
 			} else {
 				if err := mut.tx.Commit(); err != nil {
-					return zed, err
+					return res, err
 				}
 			}
 		} else {
-			// We don't own the Tx, don't do anything to it.
+			// We don't own the Tx, do not touch.
 		}
 
-		return res, nil
+		return res, err
 	}
 }
 
-type QueryMutationExtendedFnImpl[DB any, Args any, Ex any, Res any] func(ctx context.Context, db DB, args Args, ex Ex) (Res, error)
-type QueryMutationExtendedFn[DB any, Args any, Ex any, Res any] func(ctx context.Context, args Args, ex Ex) (Res, error)
-
-func CreateQueryMutationExtended[Args any, Ex any, Res any](fn QueryMutationExtendedFnImpl[MutationDB, Args, Ex, Res], opts ...MutationOptionFn) QueryMutationExtendedFn[MutationDB, Args, Ex, Res] {
-	return CreateQueryMutationExtendedV(Ident, fn)
-}
-
-func CreateQueryMutationExtendedV[Args any, Ex any, Res any](argsV func(Args) (Args, error), fn QueryMutationExtendedFnImpl[MutationDB, Args, Ex, Res], opts ...MutationOptionFn) QueryMutationExtendedFn[MutationDB, Args, Ex, Res] {
-	var zed Res
-	return func(ctx context.Context, args Args, ex Ex) (Res, error) {
-		c, ok := getQueryCtx(ctx)
+func CreateQueryMutationWithOpts[In any, Out any, Opts any](def QueryMutationWithOpts[In, Out, Opts]) func(ctx context.Context, args In, opts Opts) (Out, error) {
+	var res Out
+	return func(ctx context.Context, args In, opts Opts) (Out, error) {
+		var err error
+		dbCtx, ok := getDbCtx(ctx)
 		if !ok {
-			return zed, ErrNoQueryContext
+			return res, ErrNoContext
 		}
-
-		args, err := argsV(args)
-		if err != nil {
-			return zed, err
+		if def.Args != nil {
+			args, err = def.Args(args)
+			if err != nil {
+				return res, err
+			}
 		}
-
-		mut := mutation{
+		mut := wrapMutationDB{
 			ctx:     ctx,
-			binders: c.binders,
+			binders: dbCtx.binders,
 		}
 
-		opt := createMutationOptions(opts...)
 		weOwnTx := false
 
 		// If we are already in a Tx, don't create a new one.
-		if tx, ok := c.db.(bun.Tx); ok {
+		if tx, ok := dbCtx.db.(bun.Tx); ok {
 			mut.tx = tx
-		} else if tx, err := c.db.BeginTx(ctx, &opt.TxOptions); err != nil {
-			return zed, err
+		} else if tx, err := dbCtx.db.BeginTx(ctx, def.TxOptions); err != nil {
+			return res, err
 		} else {
 			mut.tx = tx
 			// Since we created a new Tx, create a new query context so Tx can be passed through.
-			ctx = createQueryCtx(ctx, mut.tx, mut.binders)
+			ctx = createDbCtx(ctx, mut.tx, mut.binders)
 			weOwnTx = true
 		}
 
-		res, err := fn(ctx, mut, args, ex)
+		res, err = def.Handler(ctx, mut, args, opts)
 
 		if weOwnTx {
 			if err != nil {
 				if err := mut.tx.Rollback(); err != nil {
-					return zed, err
+					return res, err
 				}
 			} else {
 				if err := mut.tx.Commit(); err != nil {
-					return zed, err
+					return res, err
 				}
 			}
 		} else {
-			// We don't own the Tx, don't do anything to it.
+			// We don't own the Tx, do not touch.
 		}
 
-		return res, nil
+		return res, err
 	}
 }
