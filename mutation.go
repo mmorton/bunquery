@@ -173,12 +173,14 @@ func CreateMutationWithOpts[In any, Opts any](def MutationWithOpts[In, Opts]) fu
 type QueryMutation[In any, Out any] struct {
 	Args      func(args In) (In, error)
 	Handler   func(ctx context.Context, db MutationDB, args In) (Out, error)
+	Use       []QueryBinder
 	TxOptions *sql.TxOptions
 }
 
 type QueryMutationWithOpts[In any, Out any, Opts any] struct {
 	Args      func(args In) (In, error)
 	Handler   func(ctx context.Context, db MutationDB, args In, opts Opts) (Out, error)
+	Use       []QueryBinder
 	TxOptions *sql.TxOptions
 }
 
@@ -198,7 +200,7 @@ func CreateQueryMutation[In any, Out any](def QueryMutation[In, Out]) func(ctx c
 		}
 		mut := wrapMutationDB{
 			ctx:     ctx,
-			binders: dbCtx.binders,
+			binders: dbCtx.binders.Use(def.Use...),
 		}
 
 		weOwnTx := false
@@ -251,7 +253,7 @@ func CreateQueryMutationWithOpts[In any, Out any, Opts any](def QueryMutationWit
 		}
 		mut := wrapMutationDB{
 			ctx:     ctx,
-			binders: dbCtx.binders,
+			binders: dbCtx.binders.Use(def.Use...),
 		}
 
 		weOwnTx := false
