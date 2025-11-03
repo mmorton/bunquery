@@ -42,11 +42,13 @@ func Ident[Args any](args Args) (Args, error) {
 type Query[In any, Out any] struct {
 	Args    func(args In) (In, error)
 	Handler func(ctx context.Context, db QueryDB, args In) (Out, error)
+	Use     []QueryBinder
 }
 
 type QueryWithOpts[In any, Out any, Opts any] struct {
 	Args    func(args In) (In, error)
 	Handler func(ctx context.Context, db QueryDB, args In, opts Opts) (Out, error)
+	Use     []QueryBinder
 }
 
 func CreateQuery[In any, Out any](def Query[In, Out]) func(ctx context.Context, args In) (Out, error) {
@@ -66,7 +68,7 @@ func CreateQuery[In any, Out any](def Query[In, Out]) func(ctx context.Context, 
 		qDB := wrapQueryDB{
 			ctx:     ctx,
 			db:      dbCtx.db,
-			binders: dbCtx.binders,
+			binders: dbCtx.binders.Use(def.Use...),
 		}
 		return def.Handler(ctx, qDB, args)
 	}
@@ -89,7 +91,7 @@ func CreateQueryWithOpts[In any, Out any, Opts any](def QueryWithOpts[In, Out, O
 		qDB := wrapQueryDB{
 			ctx:     ctx,
 			db:      dbCtx.db,
-			binders: dbCtx.binders,
+			binders: dbCtx.binders.Use(def.Use...),
 		}
 		return def.Handler(ctx, qDB, args, opts)
 	}

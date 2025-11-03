@@ -19,6 +19,9 @@ func NewQueryBindings(binds ...QueryBinder) QueryBindings {
 }
 
 func (bindings QueryBindings) Use(binds ...QueryBinder) QueryBindings {
+	if len(binds) == 0 {
+		return bindings
+	}
 	var res QueryBindings
 	if bindings != nil {
 		res = maps.Clone(bindings)

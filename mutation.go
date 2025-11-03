@@ -52,47 +52,17 @@ func (mut wrapMutationDB) NewDelete(bindArgs ...any) *bun.DeleteQuery {
 	return bindSupportedQuery(mut.ctx, mut.tx, mut.binders, mut.tx.NewDelete(), bindArgs...)
 }
 
-type MutationOptionsAware interface {
-	TxOptions() *sql.TxOptions
-}
-
-type MutationOptions struct {
-	sql.TxOptions
-}
-
-type MutationOptionFn func(*MutationOptions) *MutationOptions
-
-func WithIsolationLevel(level sql.IsolationLevel) MutationOptionFn {
-	return func(opt *MutationOptions) *MutationOptions {
-		opt.TxOptions.Isolation = level
-		return opt
-	}
-}
-
-func WithReadOnly(readOnly bool) MutationOptionFn {
-	return func(opt *MutationOptions) *MutationOptions {
-		opt.TxOptions.ReadOnly = readOnly
-		return opt
-	}
-}
-
-func createMutationOptions(opts ...MutationOptionFn) *MutationOptions {
-	opt := &MutationOptions{}
-	for _, fn := range opts {
-		opt = fn(opt)
-	}
-	return opt
-}
-
 type Mutation[In any] struct {
 	Args      func(args In) (In, error)
 	Handler   func(ctx context.Context, db MutationDB, args In) error
+	Use       []QueryBinder
 	TxOptions *sql.TxOptions
 }
 
 type MutationWithOpts[In any, Opts any] struct {
 	Args      func(args In) (In, error)
 	Handler   func(ctx context.Context, db MutationDB, args In, opts Opts) error
+	Use       []QueryBinder
 	TxOptions *sql.TxOptions
 }
 
@@ -111,7 +81,7 @@ func CreateMutation[In any](def Mutation[In]) func(ctx context.Context, args In)
 		}
 		mut := wrapMutationDB{
 			ctx:     ctx,
-			binders: dbCtx.binders,
+			binders: dbCtx.binders.Use(def.Use...),
 		}
 
 		weOwnTx := false
@@ -163,7 +133,7 @@ func CreateMutationWithOpts[In any, Opts any](def MutationWithOpts[In, Opts]) fu
 		}
 		mut := wrapMutationDB{
 			ctx:     ctx,
-			binders: dbCtx.binders,
+			binders: dbCtx.binders.Use(def.Use...),
 		}
 
 		weOwnTx := false
