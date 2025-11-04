@@ -7,17 +7,11 @@ import (
 	"github.com/uptrace/bun"
 )
 
-type MutationCommon interface {
-	QueryCommon
+type MutationDB interface {
+	QueryDB
 	NewInsert() *bun.InsertQuery
 	NewUpdate(bindArgs ...any) *bun.UpdateQuery
 	NewDelete(bindArgs ...any) *bun.DeleteQuery
-}
-
-type MutationDB interface {
-	MutationCommon
-
-	Use(binds ...QueryBinder) MutationDB
 }
 
 type wrapMutationDB struct {

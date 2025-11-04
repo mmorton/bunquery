@@ -6,13 +6,8 @@ import (
 	"github.com/uptrace/bun"
 )
 
-type QueryCommon interface {
-	NewSelect(bindArgs ...any) *bun.SelectQuery
-}
-
 type QueryDB interface {
-	QueryCommon
-	Use(binds ...QueryBinder) QueryDB
+	NewSelect(bindArgs ...any) *bun.SelectQuery
 }
 
 type wrapQueryDB struct {
