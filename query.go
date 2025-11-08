@@ -91,3 +91,16 @@ func CreateQueryWithOpts[In any, Out any, Opts any](def QueryWithOpts[In, Out, O
 		return def.Handler(ctx, qDB, args, opts)
 	}
 }
+
+func UseQuery(ctx context.Context, fn func(ctx context.Context, db QueryDB) error, binders ...QueryBinder) error {
+	dbCtx, ok := getDbCtx(ctx)
+	if !ok {
+		return ErrNoContext
+	}
+	qDB := wrapQueryDB{
+		ctx:     ctx,
+		db:      dbCtx.db,
+		binders: dbCtx.binders.Use(binders...),
+	}
+	return fn(ctx, qDB)
+}

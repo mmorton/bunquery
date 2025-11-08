@@ -283,3 +283,47 @@ func CreateQueryMutationWithOpts[In any, Out any, Opts any](def QueryMutationWit
 		return res, err
 	}
 }
+
+func UseMutation(ctx context.Context, opts *sql.TxOptions, fn func(ctx context.Context, db MutationDB) error, binders ...QueryBinder) error {
+	dbCtx, ok := getDbCtx(ctx)
+	if !ok {
+		return ErrNoContext
+	}
+
+	mut := wrapMutationDB{
+		ctx:     ctx,
+		binders: dbCtx.binders.Use(binders...),
+	}
+
+	weOwnTx := false
+
+	// If we are already in a Tx, don't create a new one.
+	if tx, ok := dbCtx.db.(bun.Tx); ok {
+		mut.tx = tx
+	} else if tx, err := dbCtx.db.BeginTx(ctx, opts); err != nil {
+		return err
+	} else {
+		mut.tx = tx
+		// Since we created a new Tx, create a new query context so Tx can be passed through.
+		ctx = createDbCtx(ctx, mut.tx, mut.binders)
+		weOwnTx = true
+	}
+
+	err := fn(ctx, mut)
+
+	if weOwnTx {
+		if err != nil {
+			if err := mut.tx.Rollback(); err != nil {
+				return err
+			}
+		} else {
+			if err := mut.tx.Commit(); err != nil {
+				return err
+			}
+		}
+	} else {
+		// We don't own the Tx, do not touch.
+	}
+
+	return err
+}
