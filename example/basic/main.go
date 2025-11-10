@@ -27,7 +27,7 @@ var GetUsers = bunquery.CreateQuery(bunquery.Query[*GetUsersArgs, []*User]{
 	},
 })
 
-func getUserByID(ctx context.Context, db bunquery.QueryCommon, id int64) (*User, error) {
+func getUserByID(ctx context.Context, db bunquery.QueryDB, id int64) (*User, error) {
 	user := new(User)
 	if err := db.NewSelect().Model(user).Where("id = ?", id).Scan(ctx); err != nil {
 		return nil, err

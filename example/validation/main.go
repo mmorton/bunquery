@@ -35,13 +35,13 @@ func GetCurrentUserID(ctx context.Context) (int64, error) {
 	return 0, fmt.Errorf("user id not found")
 }
 
-type SecurityBinder struct {
+type SecurityQueryMod struct {
 }
 
-var _ bunquery.QueryBinder = (*SecurityBinder)(nil)
+var _ bunquery.QueryMod = (*SecurityQueryMod)(nil)
 
-func (sb *SecurityBinder) Kind() string { return "security" }
-func (sb *SecurityBinder) Bind(ctx context.Context, db bun.IDB, qry bunquery.QueryBuilderEx, args ...any) {
+func (sb *SecurityQueryMod) Kind() string { return "security" }
+func (sb *SecurityQueryMod) Bind(ctx context.Context, db bun.IDB, qry bunquery.QueryBuilderEx, args ...any) {
 	currentUserID, err := GetCurrentUserID(ctx)
 	if err != nil {
 		qry.Err(err)
@@ -112,7 +112,7 @@ func main() {
 
 	currentUserID := int64(2)
 	ctx = NewSecurityContext(ctx, currentUserID)
-	ctx = bunquery.NewContext(ctx, db, &SecurityBinder{})
+	ctx = bunquery.NewContext(ctx, db, &SecurityQueryMod{})
 
 	if stories, err := GetMyStories(ctx, GetMyStoriesArgs{}); err != nil {
 		panic(err)

@@ -11,109 +11,90 @@ type QueryDB interface {
 }
 
 type wrapQueryDB struct {
-	ctx     context.Context
-	db      bun.IDB
-	binders QueryBindings
+	ctx  context.Context
+	db   bun.IDB
+	mods QueryMods
 }
 
 var _ QueryDB = (*wrapQueryDB)(nil)
 
-func (q wrapQueryDB) Use(binds ...QueryBinder) QueryDB {
-	return wrapQueryDB{
-		ctx:     q.ctx,
-		db:      q.db,
-		binders: q.binders.Use(binds...),
-	}
-}
-
 func (q wrapQueryDB) NewSelect(bindArgs ...any) *bun.SelectQuery {
-	return bindSupportedQuery(q.ctx, q.db, q.binders, q.db.NewSelect(), bindArgs...)
+	return applyQueryMods(q.ctx, q.db, q.mods, q.db.NewSelect(), bindArgs...)
 }
 
-func Ident[Args any](args Args) (Args, error) {
-	return args, nil
+func UseQuery(ctx context.Context, fn func(ctx context.Context, db QueryDB) error, opts ...AnyOpt) error {
+	dbCtx, ok := getDbCtx(ctx)
+	if !ok {
+		return ErrNoContext
+	}
+	opt := NewQueryOpts(opts...)
+	qDB := wrapQueryDB{
+		ctx:  ctx,
+		db:   dbCtx.db,
+		mods: dbCtx.mods.Use(opt.Mods...),
+	}
+	return fn(ctx, qDB)
+}
+
+func UseQueryDB(ctx context.Context, opts ...AnyOpt) (QueryDB, error) {
+	dbCtx, ok := getDbCtx(ctx)
+	if !ok {
+		return nil, ErrNoContext
+	}
+	opt := NewQueryOpts(opts...)
+	qDB := wrapQueryDB{
+		ctx:  ctx,
+		db:   dbCtx.db,
+		mods: dbCtx.mods.Use(opt.Mods...),
+	}
+	return qDB, nil
 }
 
 type Query[In any, Out any] struct {
 	Args    func(args In) (In, error)
 	Handler func(ctx context.Context, db QueryDB, args In) (Out, error)
-	Use     []QueryBinder
+	Use     []QueryMod
 }
 
-type QueryWithOpts[In any, Out any, Opts any] struct {
+type QueryEx[In any, Out any, Ext any] struct {
 	Args    func(args In) (In, error)
-	Handler func(ctx context.Context, db QueryDB, args In, opts Opts) (Out, error)
-	Use     []QueryBinder
+	Handler func(ctx context.Context, db QueryDB, args In, ext Ext) (Out, error)
+	Use     []QueryMod
+}
+
+func checkArgs[In any](args In, argsFn func(args In) (In, error)) (In, error) {
+	if argsFn != nil {
+		return argsFn(args)
+	}
+	return args, nil
 }
 
 func CreateQuery[In any, Out any](def Query[In, Out]) func(ctx context.Context, args In) (Out, error) {
-	var zero Out
 	return func(ctx context.Context, args In) (Out, error) {
+		var res Out
 		var err error
-		dbCtx, ok := getDbCtx(ctx)
-		if !ok {
-			return zero, ErrNoContext
+		args, err = checkArgs(args, def.Args)
+		if err != nil {
+			return res, err
 		}
-		if def.Args != nil {
-			args, err = def.Args(args)
-			if err != nil {
-				return zero, err
-			}
-		}
-		qDB := wrapQueryDB{
-			ctx:     ctx,
-			db:      dbCtx.db,
-			binders: dbCtx.binders.Use(def.Use...),
-		}
-		return def.Handler(ctx, qDB, args)
+		return res, UseQuery(ctx, func(ctx context.Context, db QueryDB) error {
+			res, err = def.Handler(ctx, db, args)
+			return err
+		}, WithMods(def.Use...))
 	}
 }
 
-func CreateQueryWithOpts[In any, Out any, Opts any](def QueryWithOpts[In, Out, Opts]) func(ctx context.Context, args In, opts Opts) (Out, error) {
-	var zero Out
-	return func(ctx context.Context, args In, opts Opts) (Out, error) {
+func CreateQueryEx[In any, Out any, Ext any](def QueryEx[In, Out, Ext]) func(ctx context.Context, args In, ext Ext) (Out, error) {
+	return func(ctx context.Context, args In, ext Ext) (Out, error) {
+		var res Out
 		var err error
-		dbCtx, ok := getDbCtx(ctx)
-		if !ok {
-			return zero, ErrNoContext
+		args, err = checkArgs(args, def.Args)
+		if err != nil {
+			return res, err
 		}
-		if def.Args != nil {
-			args, err = def.Args(args)
-			if err != nil {
-				return zero, err
-			}
-		}
-		qDB := wrapQueryDB{
-			ctx:     ctx,
-			db:      dbCtx.db,
-			binders: dbCtx.binders.Use(def.Use...),
-		}
-		return def.Handler(ctx, qDB, args, opts)
+		return res, UseQuery(ctx, func(ctx context.Context, db QueryDB) error {
+			res, err = def.Handler(ctx, db, args, ext)
+			return err
+		}, WithMods(def.Use...))
 	}
-}
-
-func UseQuery(ctx context.Context, fn func(ctx context.Context, db QueryDB) error, binders ...QueryBinder) error {
-	dbCtx, ok := getDbCtx(ctx)
-	if !ok {
-		return ErrNoContext
-	}
-	qDB := wrapQueryDB{
-		ctx:     ctx,
-		db:      dbCtx.db,
-		binders: dbCtx.binders.Use(binders...),
-	}
-	return fn(ctx, qDB)
-}
-
-func UseQueryDB(ctx context.Context, binders ...QueryBinder) (QueryDB, error) {
-	dbCtx, ok := getDbCtx(ctx)
-	if !ok {
-		return nil, ErrNoContext
-	}
-	qDB := wrapQueryDB{
-		ctx:     ctx,
-		db:      dbCtx.db,
-		binders: dbCtx.binders.Use(binders...),
-	}
-	return qDB, nil
 }
