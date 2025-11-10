@@ -104,3 +104,16 @@ func UseQuery(ctx context.Context, fn func(ctx context.Context, db QueryDB) erro
 	}
 	return fn(ctx, qDB)
 }
+
+func UseQueryDB(ctx context.Context, binders ...QueryBinder) (QueryDB, error) {
+	dbCtx, ok := getDbCtx(ctx)
+	if !ok {
+		return nil, ErrNoContext
+	}
+	qDB := wrapQueryDB{
+		ctx:     ctx,
+		db:      dbCtx.db,
+		binders: dbCtx.binders.Use(binders...),
+	}
+	return qDB, nil
+}
