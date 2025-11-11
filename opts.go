@@ -17,7 +17,10 @@ func (opt QueryOpt) Apply(opts any) {
 
 func WithMods(mods ...QueryMod) QueryOpt {
 	return func(o *QueryOpts) {
-		o.Mods = mods
+		if o.Mods == nil {
+			o.Mods = make([]QueryMod, 0, len(mods))
+		}
+		o.Mods = append(o.Mods, mods...)
 	}
 }
 
