@@ -22,6 +22,10 @@ type wrapMutationDB struct {
 
 var _ MutationDB = (*wrapMutationDB)(nil)
 
+func (mut wrapMutationDB) Unwrap() bun.IDB {
+	return mut.tx
+}
+
 func (mut wrapMutationDB) NewSelect(bindArgs ...any) *bun.SelectQuery {
 	return applyQueryMods(mut.ctx, mut.tx, mut.mods, mut.tx.NewSelect(), bindArgs...)
 }

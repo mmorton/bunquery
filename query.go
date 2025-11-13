@@ -7,6 +7,7 @@ import (
 )
 
 type QueryDB interface {
+	Unwrap() bun.IDB
 	NewSelect(bindArgs ...any) *bun.SelectQuery
 }
 
@@ -17,6 +18,10 @@ type wrapQueryDB struct {
 }
 
 var _ QueryDB = (*wrapQueryDB)(nil)
+
+func (q wrapQueryDB) Unwrap() bun.IDB {
+	return q.db
+}
 
 func (q wrapQueryDB) NewSelect(bindArgs ...any) *bun.SelectQuery {
 	return applyQueryMods(q.ctx, q.db, q.mods, q.db.NewSelect(), bindArgs...)
