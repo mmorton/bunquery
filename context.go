@@ -37,3 +37,10 @@ func UseContextMods(ctx context.Context, mods ...QueryMod) (context.Context, err
 	}
 	return ctx, ErrNoContext
 }
+
+func FromContext(ctx context.Context) (bun.IDB, QueryMods, error) {
+	if dbCtx, ok := getDbCtx(ctx); ok {
+		return dbCtx.db, dbCtx.mods, nil
+	}
+	return nil, nil, ErrNoContext
+}
