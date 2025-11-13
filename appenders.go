@@ -7,40 +7,32 @@ import (
 	"github.com/uptrace/bun/schema"
 )
 
-type tableAliasQueryAppender struct {
-	value any
+type QueryAppenderFunc func(fmter schema.Formatter, b []byte) ([]byte, error)
+
+var _ schema.QueryAppender = (QueryAppenderFunc)(nil)
+
+func (f QueryAppenderFunc) AppendQuery(fmter schema.Formatter, b []byte) ([]byte, error) {
+	return f(fmter, b)
 }
 
-var _ schema.QueryAppender = (*tableAliasQueryAppender)(nil)
-
-func (r *tableAliasQueryAppender) AppendQuery(fmter schema.Formatter, b []byte) ([]byte, error) {
-	if alias, err := getTableAlias(fmter.Dialect(), r.value); err != nil {
-		return nil, err
-	} else {
-		return fmter.AppendIdent(b, alias), nil
+func TableAlias(value any) QueryAppenderFunc {
+	return func(fmter schema.Formatter, b []byte) ([]byte, error) {
+		if name, err := getTableAlias(fmter.Dialect(), value); err != nil {
+			return nil, err
+		} else {
+			return fmter.AppendIdent(b, name), nil
+		}
 	}
 }
 
-func TableAlias(value any) schema.QueryAppender {
-	return &tableAliasQueryAppender{value: value}
-}
-
-type tableNameQueryAppender struct {
-	value any
-}
-
-var _ schema.QueryAppender = (*tableNameQueryAppender)(nil)
-
-func (r *tableNameQueryAppender) AppendQuery(fmter schema.Formatter, b []byte) ([]byte, error) {
-	if name, err := getTableName(fmter.Dialect(), r.value); err != nil {
-		return nil, err
-	} else {
-		return fmter.AppendIdent(b, name), nil
+func TableName(value any) QueryAppenderFunc {
+	return func(fmter schema.Formatter, b []byte) ([]byte, error) {
+		if name, err := getTableName(fmter.Dialect(), value); err != nil {
+			return nil, err
+		} else {
+			return fmter.AppendIdent(b, name), nil
+		}
 	}
-}
-
-func TableName(value any) schema.QueryAppender {
-	return &tableNameQueryAppender{value: value}
 }
 
 func getTableName(dialect schema.Dialect, of any) (string, error) {

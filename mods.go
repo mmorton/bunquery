@@ -40,3 +40,22 @@ func applyQueryMods[Query any, Source SupportsQueryBuilderEx[Query]](ctx context
 	mods.Bind(ctx, db, qbx, args...)
 	return query
 }
+
+type funcQueryMod struct {
+	kind string
+	fn   func(ctx context.Context, iDB bun.IDB, query QueryBuilderEx, args ...any)
+}
+
+var _ QueryMod = (*funcQueryMod)(nil)
+
+func (b *funcQueryMod) Kind() string { return b.kind }
+func (b *funcQueryMod) Bind(ctx context.Context, iDB bun.IDB, query QueryBuilderEx, args ...any) {
+	b.fn(ctx, iDB, query, args...)
+}
+
+func NewQueryMod(kind string, fn func(ctx context.Context, iDB bun.IDB, query QueryBuilderEx, args ...any)) QueryMod {
+	return &funcQueryMod{
+		kind: kind,
+		fn:   fn,
+	}
+}
