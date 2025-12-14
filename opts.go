@@ -12,6 +12,8 @@ func (opt QueryOpt) Apply(opts any) {
 	switch opts := opts.(type) {
 	case *QueryOpts:
 		opt(opts)
+	case *MutationOpts:
+		opt(&opts.QueryOpts)
 	}
 }
 
