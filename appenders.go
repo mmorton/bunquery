@@ -7,16 +7,16 @@ import (
 	"github.com/uptrace/bun/schema"
 )
 
-type QueryAppenderFunc func(fmter schema.Formatter, b []byte) ([]byte, error)
+type QueryAppenderFunc func(fmter schema.QueryGen, b []byte) ([]byte, error)
 
 var _ schema.QueryAppender = (QueryAppenderFunc)(nil)
 
-func (f QueryAppenderFunc) AppendQuery(fmter schema.Formatter, b []byte) ([]byte, error) {
+func (f QueryAppenderFunc) AppendQuery(fmter schema.QueryGen, b []byte) ([]byte, error) {
 	return f(fmter, b)
 }
 
 func TableAlias(value any) QueryAppenderFunc {
-	return func(fmter schema.Formatter, b []byte) ([]byte, error) {
+	return func(fmter schema.QueryGen, b []byte) ([]byte, error) {
 		if name, err := getTableAlias(fmter.Dialect(), value); err != nil {
 			return nil, err
 		} else {
@@ -26,7 +26,7 @@ func TableAlias(value any) QueryAppenderFunc {
 }
 
 func TableName(value any) QueryAppenderFunc {
-	return func(fmter schema.Formatter, b []byte) ([]byte, error) {
+	return func(fmter schema.QueryGen, b []byte) ([]byte, error) {
 		if name, err := getTableName(fmter.Dialect(), value); err != nil {
 			return nil, err
 		} else {
